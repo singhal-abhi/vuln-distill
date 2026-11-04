@@ -1,0 +1,143 @@
+# InsecureBankv2 answer key (InsecureBankv2.apk from the repo root, git blob 349ab1cb95ec4a4338afda8a7300540e4fd83ab3,
+# sha256 b18af2a0e44d7634bbcdf93664d9c78a2695e050393fcfbb5e8b91f902d194a4).
+# Used only to score results; it is never shown to any model. Written before any model scanned this app.
+#
+# Source: the 25 entries in https://github.com/dineshshetty/Android-InsecureBankv2#readme, each located in the
+# decompiled APK. A finding matches an entry when its category is one of `categories` AND its file is one of
+# `locations`. Paths are as the models see them.
+#
+# Judgement calls:
+# - Left out, runtime-only (nothing to point at statically): Root Detection and Bypass, Sensitive Information in
+#   Memory, Runtime Manipulation.
+# - Left out, server-side (the flaw lives in the Python backend, not the APK): Parameter Manipulation, Username
+#   Enumeration.
+# - Left out: Emulator Detection. No emulator check exists in this APK build.
+# - Merged: "Weak Authorization mechanism" into "Vulnerable Activity Components" (#4). In the APK both are the
+#   exported post-login activities that can be started without logging in.
+# - "Application Patching" (#10) is located at what patching targets: an admin feature hidden only by the bundled
+#   is_admin resource, checked on the client.
+# - #12 Pasteboard and #14 Keyboard cache live in layout attributes, and layouts are not sent to the models, so they
+#   are very hard to find from what the scan sees. Kept anyway: the answer key should not bend to the scanner.
+
+vulnerabilities:
+  - id: 1
+    name: "Flawed Broadcast Receivers"          # exported receiver SMSes the decrypted password to any number given
+    categories: [insecure-broadcast-receiver, exported-component]
+    locations:
+      - {file: com/android/insecurebankv2/MyBroadCastReceiver.java}
+      - {file: AndroidManifest.xml}
+
+  - id: 2
+    name: "Intent Sniffing and Injection"       # implicit broadcast "theBroadcast" carries phone number and new password
+    categories: [implicit-intent]
+    locations:
+      - {file: com/android/insecurebankv2/ChangePassword.java}
+
+  - id: 3
+    name: "Local Encryption issues"             # credentials kept in SharedPreferences, "encrypted" with a bundled key
+    categories: [insecure-data-storage, weak-crypto]
+    locations:
+      - {file: com/android/insecurebankv2/DoLogin.java}
+      - {file: com/android/insecurebankv2/LoginActivity.java}
+
+  - id: 4
+    name: "Vulnerable Activity Components / Weak Authorization"   # exported post-login screens skip the login
+    categories: [exported-component, unsafe-intent-handling]
+    locations:
+      - {file: AndroidManifest.xml}
+      - {file: com/android/insecurebankv2/PostLogin.java}
+      - {file: com/android/insecurebankv2/DoTransfer.java}
+      - {file: com/android/insecurebankv2/ViewStatement.java}
+      - {file: com/android/insecurebankv2/ChangePassword.java}
+
+  - id: 5
+    name: "Insecure Content Provider access"    # exported provider, no permission; selection passed into the SQL query
+    categories: [insecure-content-provider, injection]
+    locations:
+      - {file: com/android/insecurebankv2/TrackUserContentProvider.java}
+      - {file: AndroidManifest.xml}
+
+  - id: 6
+    name: "Insecure Webview implementation"     # JavaScript enabled, loads an HTML file from external storage
+    categories: [insecure-webview]
+    locations:
+      - {file: com/android/insecurebankv2/ViewStatement.java}
+      - {file: com/android/insecurebankv2/MyWebViewClient.java}
+
+  - id: 7
+    name: "Weak Cryptography implementation"    # AES-CBC with a static all-zero IV and a fixed key
+    categories: [weak-crypto]
+    locations:
+      - {file: com/android/insecurebankv2/CryptoClass.java}
+
+  - id: 8
+    name: "Insecure Logging mechanism"          # credentials and new passwords written to logcat / stdout
+    categories: [insecure-logging]
+    locations:
+      - {file: com/android/insecurebankv2/DoLogin.java}
+      - {file: com/android/insecurebankv2/ChangePassword.java}
+      - {file: com/android/insecurebankv2/DoTransfer.java}
+
+  - id: 9
+    name: "Application Debuggable"              # android:debuggable="true"
+    categories: [insecure-configuration]
+    locations:
+      - {file: AndroidManifest.xml}
+
+  - id: 10
+    name: "Application Patching"                # admin "create user" feature hidden only by the bundled is_admin flag
+    categories: [other, insecure-configuration]
+    locations:
+      - {file: com/android/insecurebankv2/LoginActivity.java}
+      - {file: res/values/strings.xml}
+
+  - id: 11
+    name: "Android Backup vulnerability"        # android:allowBackup="true"
+    categories: [insecure-configuration, insecure-data-storage]
+    locations:
+      - {file: AndroidManifest.xml}
+
+  - id: 12
+    name: "Android Pasteboard vulnerability"    # credential fields allow copy to the clipboard (layout attributes)
+    categories: [insecure-data-storage, other]
+    locations:
+      - {file: com/android/insecurebankv2/LoginActivity.java}
+
+  - id: 13
+    name: "Insecure SDCard storage"             # transfer statements written to external storage
+    categories: [insecure-data-storage]
+    locations:
+      - {file: com/android/insecurebankv2/DoTransfer.java}
+      - {file: com/android/insecurebankv2/ViewStatement.java}
+
+  - id: 14
+    name: "Android keyboard cache issues"       # credential fields allow keyboard learning (layout inputType)
+    categories: [insecure-data-storage, other]
+    locations:
+      - {file: com/android/insecurebankv2/LoginActivity.java}
+
+  - id: 15
+    name: "Insecure HTTP connections"           # login, transfer and password change over http://
+    categories: [insecure-configuration, ssl-validation]
+    locations:
+      - {file: com/android/insecurebankv2/DoLogin.java}
+      - {file: com/android/insecurebankv2/DoTransfer.java}
+      - {file: com/android/insecurebankv2/ChangePassword.java}
+
+  - id: 16
+    name: "Hardcoded secrets"                   # AES key string in code
+    categories: [hardcoded-secret]
+    locations:
+      - {file: com/android/insecurebankv2/CryptoClass.java}
+
+  - id: 17
+    name: "Developer Backdoors"                 # username "devadmin" logs in without a valid password
+    categories: [other, hardcoded-secret]
+    locations:
+      - {file: com/android/insecurebankv2/DoLogin.java}
+
+  - id: 18
+    name: "Weak change password implementation" # no current password asked; username taken from an intent extra
+    categories: [other, unsafe-intent-handling]
+    locations:
+      - {file: com/android/insecurebankv2/ChangePassword.java}

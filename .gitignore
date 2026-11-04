@@ -1,0 +1,13 @@
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+.jadx-install.log
+
+# Run outputs and downloaded apps stay local: results, model reply cache, APKs and decompiled code.
+work/
+target/
+
+# The assignment brief and notes on it.
+*.pdf
+REQUIREMENTS.md

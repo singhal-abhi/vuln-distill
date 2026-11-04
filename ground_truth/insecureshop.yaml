@@ -1,0 +1,141 @@
+# InsecureShop answer key: the 19 vulnerabilities from the repo README.
+# Used only to score results; it is never shown to any model.
+#
+# A finding matches an entry when its category is one of `categories` AND its file is one of `locations`
+# (and the method too, when match.location is "method" and a method is given).
+# Paths are as the models see them: Java under sources/, resources under resources/.
+# Locations were taken from the original source, checked against the decompiled v1.0 APK, and
+# cross-checked against the per-vulnerability descriptions in the upstream README.
+#
+# Judgement calls:
+# - #2/#3 and #5/#6 share a file. Matching is one-to-one, so each pair needs two separate findings.
+# - #8: the APK carries no version for net.gotev:uploadservice (3.2.3 per the source build.gradle), so its
+#   exported UploadService in the manifest counts as a location alongside the library list.
+# - InsecureshopFileProvider.java also returns credentials but is never declared in the manifest,
+#   so it is unreachable and not a location for #15.
+# - Entries whose location includes AndroidManifest.xml accept only their specific category, so a generic
+#   "exported component" finding on the manifest can't match them by accident.
+
+vulnerabilities:
+  - id: 1
+    name: Hardcoded Credentials
+    categories: [hardcoded-secret]
+    locations:
+      - {file: com/insecureshop/util/Util.java, method: getUserCreds}
+
+  - id: 2
+    name: Insufficient URL Validation   # deep link /web loads any ?url= in the WebView
+    categories: [url-validation, insecure-webview, unsafe-intent-handling]
+    locations:
+      - {file: com/insecureshop/WebViewActivity.java, method: onCreate}
+
+  - id: 3
+    name: Weak Host Validation Check    # /webview only checks url.endsWith("insecureshopapp.com")
+    categories: [url-validation, insecure-webview]
+    locations:
+      - {file: com/insecureshop/WebViewActivity.java, method: onCreate}
+
+  - id: 4
+    name: Arbitrary Code Execution      # loads and runs code from any installed package named com.insecureshopapp*
+    categories: [code-execution]
+    locations:
+      - {file: com/insecureshop/LoginActivity.java, method: onLogin}
+
+  - id: 5
+    name: Access to Protected Components   # startActivity() on an attacker-supplied "extra_intent"
+    categories: [unsafe-intent-handling, exported-component]
+    locations:
+      - {file: com/insecureshop/WebView2Activity.java, method: onCreate}
+
+  - id: 6
+    name: Unprotected Data URIs         # exported activity passes intent data / extras straight to loadUrl
+    categories: [url-validation, insecure-webview, unsafe-intent-handling]
+    locations:
+      - {file: com/insecureshop/WebView2Activity.java, method: onCreate}
+
+  - id: 7
+    name: Theft of Arbitrary Files      # copies any attacker-chosen file URI to external storage
+    categories: [file-theft, unsafe-intent-handling, insecure-data-storage]
+    locations:
+      - {file: com/insecureshop/ChooserActivity.java, method: onCreate}
+      - {file: com/insecureshop/ChooserActivity.java, method: makeTempCopy}
+
+  - id: 8
+    name: Using Components with Known Vulnerabilities   # net.gotev:uploadservice, UploadService exported
+    categories: [vulnerable-dependency]
+    locations:
+      - {file: third-party-libraries.txt}
+      - {file: AndroidManifest.xml}
+
+  - id: 9
+    name: Insecure Broadcast Receiver   # exported activity registers a receiver that opens any "web_url"
+    categories: [insecure-broadcast-receiver, exported-component, unsafe-intent-handling, url-validation]
+    locations:
+      - {file: com/insecureshop/AboutUsActivity.java, method: onCreate}
+      - {file: com/insecureshop/CustomReceiver.java, method: onReceive}
+
+  - id: 10
+    name: AWS Cognito Misconfiguration  # Cognito identity pool ID in strings.xml
+    categories: [cloud-misconfiguration, hardcoded-secret]
+    locations:
+      - {file: res/values/strings.xml}
+
+  - id: 11
+    name: Insecure use of FilePaths in FileProvider   # <root-path path="/">
+    categories: [insecure-file-provider]
+    locations:
+      - {file: res/xml/provider_paths.xml}
+      - {file: AndroidManifest.xml}
+
+  - id: 12
+    name: Use of Implicit intent to send a broadcast with sensitive data   # username + password in an implicit broadcast
+    categories: [implicit-intent]
+    locations:
+      - {file: com/insecureshop/AboutUsActivity.java, method: onSendData}
+
+  - id: 13
+    name: Intercepting Implicit intent to load arbitrary URL   # implicit com.insecureshop.action.WEBVIEW intents
+    categories: [implicit-intent, url-validation]
+    locations:
+      - {file: com/insecureshop/SendingDataViaActionActivity.java, method: onSendData}
+      - {file: com/insecureshop/broadcast/ProductDetailBroadCast.java, method: onReceive}
+
+  - id: 14
+    name: Insecure Implementation of SetResult in exported Activity   # setResult(-1, getIntent())
+    categories: [unsafe-intent-handling, exported-component]
+    locations:
+      - {file: com/insecureshop/ResultActivity.java, method: onCreate}
+
+  - id: 15
+    name: Insecure Content Provider     # exported, guarded only by a custom permission with normal protection level
+    categories: [insecure-content-provider]
+    locations:
+      - {file: com/insecureshop/contentProvider/InsecureShopProvider.java, method: query}
+      - {file: AndroidManifest.xml}
+
+  - id: 16
+    name: Lack of SSL Certificate Validation   # onReceivedSslError -> handler.proceed()
+    categories: [ssl-validation]
+    locations:
+      - {file: com/insecureshop/util/CustomWebViewClient.java, method: onReceivedSslError}
+
+  - id: 17
+    name: Insecure Webview Properties Enabled   # JavaScript + setAllowUniversalAccessFromFileURLs(true)
+    categories: [insecure-webview]
+    locations:
+      - {file: com/insecureshop/WebViewActivity.java, method: onCreate}
+      - {file: com/insecureshop/WebView2Activity.java, method: onCreate}
+      - {file: com/insecureshop/PrivateActivity.java, method: onCreate}
+
+  - id: 18
+    name: Insecure Data Storage         # plaintext username/password in SharedPreferences
+    categories: [insecure-data-storage]
+    locations:
+      - {file: com/insecureshop/util/Prefs.java}
+      - {file: com/insecureshop/LoginActivity.java, method: onLogin}
+
+  - id: 19
+    name: Insecure Logging              # Log.d of username and password
+    categories: [insecure-logging]
+    locations:
+      - {file: com/insecureshop/LoginActivity.java, method: onLogin}

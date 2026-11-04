@@ -1,0 +1,179 @@
+# AndroGoat answer key (v2.0.1 release APK, sha256 3e6f6b538b82874dd94c0d8cdadd69ba54d49b59d2c7eb055073892e8a4fc0e0).
+# Used only to score results; it is never shown to any model. Written before any model scanned this app.
+#
+# Source: the challenge list in https://github.com/satishpatnayak/AndroGoat#readme, with each location found in
+# the decompiled release. A finding matches an entry when its category is one of `categories` AND its file is one
+# of `locations`. Paths are as the models see them.
+#
+# Judgement calls:
+# - Left out (runtime bypasses of a protection, with no weakness to point at in code): Root Detection, Emulator
+#   Detection, Certificate Pinning (OkHttp3), Certificate Pinning (Network Security Config), Binary Patching.
+# - Left out: Misconfigured Firebase DB. No Firebase URL or config exists anywhere in this build.
+# - Merged: "Unprotected Activity" and "Custom URL Scheme" are the same exported deep-link activity (#12).
+# - Merged: "Network Intercepting: HTTPS" and "Misconfigured network_security_config.xml" are the same setting,
+#   trusting user-installed CAs (#21).
+# - Added: OS command injection (#26). The app ships a challenge activity for it, but the README list omits it.
+# - #6 Keyboard Cache lives in a layout's inputType, and layouts are not sent to the models, so it is very hard to
+#   find from what the scan sees. Kept anyway: the answer key should not bend to the scanner.
+
+vulnerabilities:
+  - id: 1
+    name: "Insecure Data Storage: Shared Prefs 1"   # username and password saved in plain SharedPreferences
+    categories: [insecure-data-storage]
+    locations:
+      - {file: owasp/sat/agoat/InsecureStorageSharedPrefs.java}
+
+  - id: 2
+    name: "Insecure Data Storage: Shared Prefs 2"   # game score kept in SharedPreferences, trivially tampered
+    categories: [insecure-data-storage]
+    locations:
+      - {file: owasp/sat/agoat/InsecureStorageSharedPrefs1Activity.java}
+
+  - id: 3
+    name: "Insecure Data Storage: SQLite"           # credentials in a plaintext SQLite database
+    categories: [insecure-data-storage]
+    locations:
+      - {file: owasp/sat/agoat/InsecureStorageSQLiteActivity.java}
+
+  - id: 4
+    name: "Insecure Data Storage: Temp Files"       # credentials written to a temp file
+    categories: [insecure-data-storage]
+    locations:
+      - {file: owasp/sat/agoat/InsecureStorageTempActivity.java}
+
+  - id: 5
+    name: "Insecure Data Storage: SD Card"          # credentials written to external storage
+    categories: [insecure-data-storage]
+    locations:
+      - {file: owasp/sat/agoat/InsecureStorageSDCardActivity.java}
+
+  - id: 6
+    name: "Keyboard Cache"                          # credential fields allow keyboard learning (layout inputType)
+    categories: [insecure-data-storage, other]
+    locations:
+      - {file: owasp/sat/agoat/KeyboardCacheActivity.java}
+
+  - id: 7
+    name: "Insecure Logging"                        # credentials written to logcat
+    categories: [insecure-logging]
+    locations:
+      - {file: owasp/sat/agoat/InsecureLoggingActivity.java}
+
+  - id: 8
+    name: "Input Validations: XSS"                  # user input rendered in a JavaScript-enabled WebView
+    categories: [injection, insecure-webview]
+    locations:
+      - {file: owasp/sat/agoat/XSSActivity.java}
+
+  - id: 9
+    name: "Input Validations: SQLi"                 # login query built by string concatenation
+    categories: [injection]
+    locations:
+      - {file: owasp/sat/agoat/SQLinjectionActivity.java}
+
+  - id: 10
+    name: "Input Validations: WebView"              # any URL scheme loaded, including file:// for local files
+    categories: [insecure-webview, url-validation]
+    locations:
+      - {file: owasp/sat/agoat/InputValidationsWebViewURLActivity.java}
+
+  - id: 11
+    name: "Input Validations: QR Code"              # QR content rendered unescaped in a WebView
+    categories: [injection, insecure-webview]
+    locations:
+      - {file: owasp/sat/agoat/QRCodeXSSActivity.java}
+
+  - id: 12
+    name: "Unprotected Activity / Custom URL Scheme"   # exported deep link androgoat://vulnapp skips the PIN screen
+    categories: [exported-component, unsafe-intent-handling]
+    locations:
+      - {file: owasp/sat/agoat/AccessControl1ViewActivity.java}
+      - {file: AndroidManifest.xml}
+
+  - id: 13
+    name: "Unprotected Service"                     # exported DownloadInvoiceService, startable by any app
+    categories: [exported-component]
+    locations:
+      - {file: owasp/sat/agoat/DownloadInvoiceService.java}
+      - {file: AndroidManifest.xml}
+
+  - id: 14
+    name: "Unprotected Broadcast Receiver"          # exported receiver that shows credentials to any sender
+    categories: [insecure-broadcast-receiver, exported-component]
+    locations:
+      - {file: owasp/sat/agoat/ShowDataReceiver.java}
+      - {file: AndroidManifest.xml}
+
+  - id: 15
+    name: "Unprotected Content Provider"            # exported provider with no permission, serving user PINs
+    categories: [insecure-content-provider, exported-component]
+    locations:
+      - {file: owasp/sat/agoat/ContentProviderActivity.java}
+      - {file: AndroidManifest.xml}
+
+  - id: 16
+    name: "Insecure Clipboard Usage"                # sensitive data copied to the clipboard
+    categories: [insecure-data-storage, other]
+    locations:
+      - {file: owasp/sat/agoat/ClipboardActivity.java}
+
+  - id: 17
+    name: "Hardcoding Issues: Shopping Cart"        # hardcoded promo code
+    categories: [hardcoded-secret]
+    locations:
+      - {file: owasp/sat/agoat/HardCodeActivity.java}
+
+  - id: 18
+    name: "Hardcoding Issues: AI"                   # hardcoded OpenAI API key
+    categories: [hardcoded-secret]
+    locations:
+      - {file: owasp/sat/agoat/AIChatActivity.java}
+
+  - id: 19
+    name: "Hardcoding Issues: Cloud Service"        # hardcoded AWS access key and secret
+    categories: [hardcoded-secret, cloud-misconfiguration]
+    locations:
+      - {file: owasp/sat/agoat/CloudServicesActivity.java}
+
+  - id: 20
+    name: "Network Intercepting: HTTP"              # cleartext traffic permitted app-wide
+    categories: [insecure-configuration, ssl-validation]
+    locations:
+      - {file: res/xml/network_security_config.xml}
+      - {file: owasp/sat/agoat/TrafficActivity.java}
+
+  - id: 21
+    name: "Network Intercepting: HTTPS / Misconfigured network_security_config.xml"   # trusts user-installed CAs
+    categories: [ssl-validation, insecure-configuration]
+    locations:
+      - {file: res/xml/network_security_config.xml}
+
+  - id: 22
+    name: "Android Debuggable"                      # android:debuggable="true"
+    categories: [insecure-configuration]
+    locations:
+      - {file: AndroidManifest.xml}
+
+  - id: 23
+    name: "Android allowBackup"                     # android:allowBackup="true"
+    categories: [insecure-configuration, insecure-data-storage]
+    locations:
+      - {file: AndroidManifest.xml}
+
+  - id: 24
+    name: "Broken Cryptography"                     # PIN hashed with unsalted MD5
+    categories: [weak-crypto]
+    locations:
+      - {file: owasp/sat/agoat/AccessControlIssue1Activity.java}
+
+  - id: 25
+    name: "Biometric Authentication"                # BiometricPrompt without a CryptoObject: success callback is bypassable
+    categories: [other]
+    locations:
+      - {file: owasp/sat/agoat/BioMetricAuthActivity.java}
+
+  - id: 26
+    name: "OS Command Injection"                    # user input passed to Runtime.exec
+    categories: [injection, code-execution]
+    locations:
+      - {file: owasp/sat/agoat/InputValidationsOSCMDInjectionMain2Activity.java}

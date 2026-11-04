@@ -1,0 +1,6 @@
+# InsecureBankv2, APK from the repo root. Use with: python -m scanner run --app apps/insecurebank.yaml
+app:
+  input_dir: target/insecurebank/decompiled
+  apk: target/insecurebank/InsecureBankv2.apk
+  work_dir: work/insecurebank
+  ground_truth: ground_truth/insecurebank.yaml

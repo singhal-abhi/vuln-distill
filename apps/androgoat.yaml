@@ -1,0 +1,6 @@
+# AndroGoat (OWASP), v2.0.1 release APK. Use with: python -m scanner run --app apps/androgoat.yaml
+app:
+  input_dir: target/androgoat/decompiled
+  apk: target/androgoat/AndroGoat.apk
+  work_dir: work/androgoat
+  ground_truth: ground_truth/androgoat.yaml
