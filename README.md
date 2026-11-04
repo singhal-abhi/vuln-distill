@@ -1,59 +1,112 @@
-# Android vulnerability scanner: teacher → student
+# vuln-distill: Android vulnerability scanning, teacher → student
 
-A frontier model scans a decompiled Android app, turns its findings into general lessons,
-and an open model rescans with those lessons. Recall is measured against a known answer key.
+A frontier model (the **teacher**) scans a decompiled Android app, then turns what it found into **general lessons**.
+An open model (the **student**) scans the same app twice, without and with those lessons. Each scan's findings are
+matched against a known answer key, so the report shows how much the lessons raised the student's recall.
 
-## Setup
+## 1. Setup
+
+You need Python 3.10+, [jadx](https://github.com/skylot/jadx) (decompiles the APK) and API keys.
 
 ```bash
-brew install jadx
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-cp .env.example .env   # add your API keys
+git clone https://github.com/singhal-abhi/vuln-distill.git
+cd vuln-distill
+
+brew install jadx                       # macOS; on Linux, see the jadx releases page. Pulls in Java if needed.
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+
+cp .env.example .env                    # then fill in the keys you use (see below)
 ```
 
-## Run
+Keys in `.env`, matched to the models chosen in `config.yaml`:
+
+| Key | Needed for (default config) |
+|---|---|
+| `ANTHROPIC_API_KEY` | teacher and classifier (`anthropic/claude-haiku-5-5`) |
+| `OPENROUTER_API_KEY` | student (`openrouter/nvidia/nemotron-3.5-super-vl:free`) |
+| `OPENAI_API_KEY`, `GROQ_API_KEY` | only if you pick models from those providers |
+
+## 2. Get an app to scan
+
+Put the APK where `config.yaml` (or an app file in `apps/`) expects it. It is decompiled automatically on first run.
 
 ```bash
-.venv/bin/python -m scanner ingest                        # show what will be scanned
-.venv/bin/python -m scanner run                           # all steps, then prints the report
-.venv/bin/python -m scanner run --step teacher            # teacher scan + lessons (once; --force to redo)
+mkdir -p target/androgoat target/insecurebank
+curl -L -o target/InsecureShop.apk \
+  https://github.com/hax0rgb/InsecureShop/releases/download/v1.0/InsecureShop.apk
+curl -L -o target/androgoat/AndroGoat.apk \
+  https://github.com/satishpatnayak/AndroGoat/releases/download/v2.0.1/AndroGoat.apk
+curl -L -o target/insecurebank/InsecureBankv2.apk \
+  https://raw.githubusercontent.com/dineshshetty/Android-InsecureBankv2/master/InsecureBankv2.apk
+```
+
+The SHA-256 of each APK is recorded at the top of its answer key in `ground_truth/`.
+
+## 3. Run
+
+```bash
+.venv/bin/python -m scanner ingest      # check what will be scanned (files, resources, prompt size); no model calls
+.venv/bin/python -m scanner run         # teacher scan + lessons, then student without and with lessons, then the report
+```
+
+`run` prints progress and the cost of every scan, then the report. Step by step instead:
+
+```bash
+.venv/bin/python -m scanner run --step teacher            # teacher scan + lessons (done once; --force to redo)
 .venv/bin/python -m scanner run --step student            # students, no lessons
 .venv/bin/python -m scanner run --step student-lessons    # students, with the teacher's lessons
 .venv/bin/python -m scanner report                        # re-score saved results (no model calls)
 ```
 
-Add `--app apps/androgoat.yaml` (or `apps/insecurebank.yaml`) to any command to work on another app.
+Add `--app apps/androgoat.yaml` (or `apps/insecurebank.yaml`) to any command to work on another app. Without
+`--app`, the app in `config.yaml` is used (InsecureShop).
 
-The scan prompt never names bug types. Models describe findings in their own words; a fixed classifier
-model (`classifier` in config) then maps each finding onto `categories` for scoring.
-With lessons, the prompt is identical except for a hint and the lessons appended after the app.
-Lessons must be general: the prompt forbids naming or describing the app, and lessons that mention the app's
-package or class names are rejected in code.
+Run the tests with `.venv/bin/python -m pytest`.
 
-Output goes to `work_dir`: findings and their cost per model and run, `lessons.json`, `report.md`, `scores.json`.
-Model replies are cached in `cache_dir` (shared by all apps), so re-running only pays for calls that changed.
+## 4. Output
 
-## New app or new model
+Everything goes to the app's `work_dir` (for example `work/insecureshop/`):
 
-- **App:** copy `apps/androgoat.yaml` and point it at the new APK (`apk`, decompiled into `input_dir` on first run)
-  or at an existing jadx output folder (`input_dir`). `ground_truth` is optional: without an answer key you get
-  the findings and no scores.
-- **Model:** write it as `<provider>/<model id>` in `teacher`, `students` or `classifier` in `config.yaml`, e.g.
-  `anthropic/claude-opus-5-5` or `groq/openai/gpt-oss-120b` (options are listed there).
-  Any OpenAI-compatible server is a new entry under `providers`.
+| File | Contains |
+|---|---|
+| `report.md` | Recall per model and run, the lift from lessons, cost, a per-vulnerability table, the lessons |
+| `scores.json` | The same numbers, machine-readable |
+| `lessons.json` | The teacher's lessons, plus any rejected as app-specific (with the reason) |
+| `findings/<model>/<condition>/` | Every finding of every run, and what each run cost |
 
-Free tiers limit requests per day (OpenRouter's free models stop at a daily cap without account credit), so a run
-with several students and runs can hit the cap; cached calls are kept, and re-running continues from there.
+Model replies are cached in `work/cache/` (shared by all apps), so re-running only pays for calls that changed.
+
+## 5. Scan a new app or use another model
+
+- **New app:** copy `apps/androgoat.yaml`, point `apk` at the new APK and give it its own `work_dir`. An answer key
+  (`ground_truth`) is optional: without one you get the findings and no scores.
+- **Another model:** set `teacher`, `students` or `classifier` in `config.yaml` to `<provider>/<model id>`, for
+  example `anthropic/claude-sonnet-5-5` or `groq/openai/gpt-oss-120b`. Options are listed there. Any
+  OpenAI-compatible server is one more entry under `providers`.
+
+Free tiers limit requests (OpenRouter's free models cap requests per day without account credit; Groq's free tier
+caps tokens per minute below the size of one scan). Cached calls are kept, so re-running continues where it stopped.
+
+## How it works
+
+- **Scan:** the prompt holds the manifest, the app's own code, key resources and the library list, and never names
+  bug types. Models describe findings in their own words.
+- **Classify (scoring only):** a fixed classifier model maps each finding onto `categories` in `config.yaml`, the
+  same names the answer keys use. Scanning models never see this list.
+- **Lessons:** the teacher writes rules meant for any Android app. The prompt forbids naming or describing the app,
+  and lessons that name its package or classes are rejected in code.
+- **Match:** a finding counts when its category and its file match an answer-key entry, one finding per entry.
 
 ## Layout
 
 | Path | Does |
 |---|---|
-| `scanner/__main__.py` | Command line: `ingest`, `run`, `report` |
-| `scanner/pipeline.py` | The loop: teacher once, then each student without and with lessons |
-| `scanner/config.py`, `store.py` | Settings (with the optional app file), saved findings and lessons |
-| `scanner/ingest/` | Loads the decompiled app: manifest, the app's own code, key resources, library list |
-| `scanner/llm/` | One `complete(system, user)` interface over Anthropic and OpenAI-compatible APIs; retries, the reply cache, tokens and cost |
-| `scanner/analysis/` | What models are asked to do: scan the app, classify findings (scoring only), write general lessons; all prompts and JSON schemas |
-| `scanner/scoring/` | Finding ↔ answer key (right bug type **and** right location, one-to-one) and the fixed-layout report |
-| `apps/`, `ground_truth/` | Per-app settings and answer keys (InsecureShop is the default in `config.yaml`) |
+| [`scanner/`](scanner/) | The package: command line, the loop, settings, saved results |
+| [`scanner/ingest/`](scanner/ingest/) | Decompiles and loads the app |
+| [`scanner/llm/`](scanner/llm/) | Model providers, retries, the reply cache, tokens and cost |
+| [`scanner/analysis/`](scanner/analysis/) | Scanning, classifying, lessons; all prompts |
+| [`scanner/scoring/`](scanner/scoring/) | Matching against the answer key, the report |
+| [`apps/`](apps/) | Per-app settings for apps other than the default |
+| [`ground_truth/`](ground_truth/) | Answer keys |
+| [`tests/`](tests/) | Unit tests |
