@@ -1,6 +1,6 @@
 """Score saved findings against the answer key and write a short, fixed-layout report. Makes no model calls.
 
-Always the same rows, in order: the teacher, then each student without and with lessons.
+What is scored: each student's recall without vs with lessons. The teacher's recall is shown as a reference.
 """
 
 import json
@@ -92,12 +92,13 @@ def write_report(config: dict) -> str:
 
 
 def _rows(config: dict) -> list[tuple[str, str, str]]:
-    """(label, model, condition) for every row, in report order. Students are numbered only when there are several."""
-    rows = [("Teacher", config["teacher"], TEACHER)]
+    """(label, model, condition) for every row, in report order: what is scored (each student without and with
+    lessons) first, the teacher last as a reference. Students are numbered only when there are several."""
+    rows = []
     for n, student in enumerate(config["students"], 1):
         name = f"Student {n}" if len(config["students"]) > 1 else "Student"
         rows += [(name, student, BASELINE), (f"{name} + lessons", student, WITH_LESSONS)]
-    return rows
+    return rows + [("Teacher (reference)", config["teacher"], TEACHER)]
 
 
 def _lift_lines(config: dict, rows: list[tuple[str, str, str]], scores: dict) -> list[str]:

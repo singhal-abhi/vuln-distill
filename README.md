@@ -1,8 +1,12 @@
 # vuln-distill: Android vulnerability scanning, teacher → student
 
 A frontier model (the **teacher**) scans a decompiled Android app, then turns what it found into **general lessons**.
-An open model (the **student**) scans the same app twice, without and with those lessons. Each scan's findings are
-matched against a known answer key, so the report shows how much the lessons raised the student's recall.
+An open model (the **student**) scans the same app twice, without and with those lessons.
+
+**Scoring is optional.** It needs an answer key (the app's known vulnerabilities, see [`ground_truth/`](ground_truth/))
+and measures one thing: the student's recall without lessons vs with lessons. Everything else in the report (the
+teacher's own recall as a reference, the per-vulnerability table, cost) is extra detail. Without an answer key, the
+pipeline runs the same and you get the findings and lessons.
 
 ## 1. Setup
 
@@ -70,7 +74,7 @@ Everything goes to the app's `work_dir` (for example `work/insecureshop/`):
 
 | File | Contains |
 |---|---|
-| `report.md` | Recall per model and run, the lift from lessons, cost, a per-vulnerability table, the lessons |
+| `report.md` | Only with an answer key: the student's recall without vs with lessons (the lift); then, for reference, the teacher's recall, cost, a per-vulnerability table and the lessons |
 | `scores.json` | The same numbers, machine-readable |
 | `lessons.json` | The teacher's lessons, plus any rejected as app-specific (with the reason) |
 | `findings/<model>/<condition>/` | Every finding of every run, and what each run cost |
@@ -79,8 +83,8 @@ Model replies are cached in `work/cache/` (shared by all apps), so re-running on
 
 ## 5. Scan a new app or use another model
 
-- **New app:** copy `apps/androgoat.yaml`, point `apk` at the new APK and give it its own `work_dir`. An answer key
-  (`ground_truth`) is optional: without one you get the findings and no scores.
+- **New app:** copy `apps/androgoat.yaml`, point `apk` at the new APK and give it its own `work_dir`. Leave out
+  `ground_truth` unless you have an answer key: without one you get the findings and lessons, and no scores.
 - **Another model:** set `teacher`, `students` or `classifier` in `config.yaml` to `<provider>/<model id>`, for
   example `anthropic/claude-sonnet-5-5` or `groq/openai/gpt-oss-120b`. Options are listed there. Any
   OpenAI-compatible server is one more entry under `providers`.
@@ -96,7 +100,8 @@ caps tokens per minute below the size of one scan). Cached calls are kept, so re
   same names the answer keys use. Scanning models never see this list.
 - **Lessons:** the teacher writes rules meant for any Android app. The prompt forbids naming or describing the app,
   and lessons that name its package or classes are rejected in code.
-- **Match:** a finding counts when its category and its file match an answer-key entry, one finding per entry.
+- **Score (optional):** a finding counts when its category and its file match an answer-key entry, one finding per
+  entry. The number that matters is the student's recall with lessons minus without.
 
 ## Layout
 

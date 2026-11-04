@@ -1,6 +1,8 @@
 # ground_truth
 
-Answer keys: the known vulnerabilities of each test app. They are used only for scoring and never shown to a model.
+Answer keys: the known vulnerabilities of each test app. **Optional**: they are only needed to score a run, and
+scoring measures the student's recall without vs with lessons. They are never shown to a model. A new app needs none:
+leave `ground_truth` out of its app file and the pipeline still produces findings and lessons.
 
 | File | App | Entries |
 |---|---|---|
