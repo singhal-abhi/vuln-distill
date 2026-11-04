@@ -1,5 +1,8 @@
 # vuln-distill: Android vulnerability scanning, teacher → student
 
+**Write-up** (results, match function, models, scaling to large apps, dynamic analysis):
+[Google Doc](https://docs.google.com/document/d/1Q4feudrnsOFKK3dwODNCXnYwBfsNWFHjv8bceQGSxKk/edit)
+
 A frontier model (the **teacher**) scans a decompiled Android app, then turns what it found into **general lessons**.
 An open model (the **student**) scans the same app twice, without and with those lessons.
 
