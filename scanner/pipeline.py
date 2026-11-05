@@ -54,7 +54,12 @@ def run(config: dict, steps: list[str], force_teacher: bool = False) -> None:
 
 def scan_runs(model, app, config: dict, cache: ResponseCache, condition: str, classifier, count: int,
               lessons: list[dict] | None = None) -> tuple[list[list[Finding]], list[Usage]]:
-    """`count` scans, each logged with its findings and cost. A cached run shows what it cost when first run."""
+    """`count` scans, each logged with its findings and cost. A cached run shows what it cost when first run.
+
+    The runs are independent (each has its own cache tag) and could all run at once, as could the students and
+    conditions in `run`. They run one after another on purpose, so free-tier rate limits are not hit; the retries in
+    `complete_with_retries` absorb the occasional limit that still is.
+    """
     runs, usages = [], []
     for run in range(1, count + 1):
         findings, usage = scan(model, app, config, cache, f"{condition}-run-{run}", classifier, lessons)

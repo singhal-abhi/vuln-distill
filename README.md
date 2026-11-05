@@ -97,6 +97,8 @@ Model replies are cached in `work/cache/` (shared by all apps), so re-running on
 
 Free tiers limit requests (OpenRouter's free models cap requests per day without account credit; Groq's free tier
 caps tokens per minute below the size of one scan). Cached calls are kept, so re-running continues where it stopped.
+For the same reason, model calls run one at a time. The student's runs, the two conditions and the students are
+independent of each other and could run in parallel on a paid tier.
 
 ## How it works
 
