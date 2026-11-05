@@ -8,7 +8,8 @@ from scanner.analysis.findings import Finding, merge_runs
 from scanner.ingest.app import load_app
 from scanner.analysis.lessons import make_lessons
 from scanner.llm.models import build_model
-from scanner.analysis.scan import scan
+from scanner.analysis.scan import scan, scan_prompt
+from scanner.llm.context import check_fits
 from scanner.store import BASELINE, TEACHER, WITH_LESSONS, load_runs, read_lessons, save_findings, save_lessons
 from scanner.llm.usage import Usage, total
 
@@ -29,8 +30,15 @@ def run(config: dict, steps: list[str], force_teacher: bool = False) -> None:
 
     app = load_app(config)
     classifier = build_model(config, config["classifier"])
-    if teacher_needed:
-        run_teacher(config, app, work_dir, classifier, force_teacher)
+    # Build every model and check the app fits each one before any call, so a too-small student stops the run
+    # before the teacher spends anything. scan() checks again with the exact prompt, lessons included.
+    teacher = build_model(config, config["teacher"]) if teacher_needed else None
+    students = [build_model(config, name) for name in config["students"]] if conditions else []
+    system, user = scan_prompt(app, ready_lessons(work_dir, config) or None)
+    for model in filter(None, [teacher, *students]):
+        check_fits(model, system, user, config)
+    if teacher:
+        run_teacher(config, app, work_dir, teacher, classifier, force_teacher)
     lessons = ready_lessons(work_dir, config)
     if WITH_LESSONS in conditions and not lessons:
         # The teacher just ran but left no usable lessons (all rejected, say). Without lessons the "with lessons"
@@ -42,14 +50,13 @@ def run(config: dict, steps: list[str], force_teacher: bool = False) -> None:
         return
 
     cache = response_cache(config)
-    for name in config["students"]:
-        student = build_model(config, name)
+    for student in students:
         for condition in conditions:
             condition_lessons = lessons if condition == WITH_LESSONS else None
-            print(f"Student {name}: scanning " + (f"with {len(lessons)} lessons" if condition_lessons else "without lessons"))
+            print(f"Student {student.name}: scanning " + (f"with {len(lessons)} lessons" if condition_lessons else "without lessons"))
             runs, usages = scan_runs(student, app, config, cache, condition, classifier,
                                      config["run"]["student_runs"], condition_lessons)
-            save_findings(work_dir, name, condition, runs, usages)
+            save_findings(work_dir, student.name, condition, runs, usages)
 
 
 def scan_runs(model, app, config: dict, cache: ResponseCache, condition: str, classifier, count: int,
@@ -71,10 +78,9 @@ def scan_runs(model, app, config: dict, cache: ResponseCache, condition: str, cl
     return runs, usages
 
 
-def run_teacher(config: dict, app, work_dir: Path, classifier, force: bool) -> None:
+def run_teacher(config: dict, app, work_dir: Path, teacher, classifier, force: bool) -> None:
     """Two stages saved separately: the scan, then the lessons. Saved findings are always reused (even if
     teacher_runs changed since); only --force scans again, with fresh calls rather than cached replies."""
-    teacher = build_model(config, config["teacher"])
     saved = load_runs(work_dir, teacher.name, TEACHER)
     if saved and not force:
         print(f"Teacher {teacher.name}: reusing saved scan ({len(saved)} run(s))")

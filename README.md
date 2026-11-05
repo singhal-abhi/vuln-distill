@@ -97,6 +97,8 @@ Model replies are cached in `work/cache/` (shared by all apps), so re-running on
 
 - **New app:** copy `apps/androgoat.yaml`, point `apk` at the new APK and give it its own `work_dir`. Leave out
   `ground_truth` unless you have an answer key: the student is then scored against the teacher's findings.
+  The whole app goes into one request, so before any call `run` checks that it fits each model's context window.
+  If it doesn't, the run stops and lists models that fit.
 - **Another model:** set `teacher`, `students` or `classifier` in `config.yaml` to `<provider>/<model id>`, for
   example `anthropic/claude-sonnet-5-5` or `groq/openai/gpt-oss-120b`. Options are listed there. Any
   OpenAI-compatible server is one more entry under `providers`.

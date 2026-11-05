@@ -17,7 +17,7 @@ def test_falls_back_to_free_text():
 
 
 def test_without_model_list_assumes_support():
-    assert supported_parameters(None, "any/model") is None
+    assert supported_parameters(None) is None
     assert output_mode(None) == "schema"
 
 

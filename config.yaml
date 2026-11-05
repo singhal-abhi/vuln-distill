@@ -48,7 +48,8 @@ providers:
     type: openai_compatible
     api_key_env: OPENROUTER_API_KEY
     base_url: https://openrouter.ai/api/v1
-    endpoints_url: https://openrouter.ai/api/v1/models/{model}/endpoints   # one model's providers and their supported_parameters
+    endpoints_url: https://openrouter.ai/api/v1/models/{model}/endpoints   # one model's hosts: supported_parameters, context_length
+    models_url: https://openrouter.ai/api/v1/models?context={tokens}   # models with at least that context; suggested when an app is too big
     extra_body:                            # sent with every request
       usage: {include: true}               # report each call's cost
       provider: {require_parameters: true} # route only to hosts that support the request's parameters (the schema)

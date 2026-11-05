@@ -36,6 +36,7 @@ class Reply:
 
 class Model(Protocol):
     name: str
+    context_window: int | None   # input + output tokens the model accepts; None if the provider doesn't say
 
     def complete(self, system: str, user: str, schema: dict | None = None) -> Reply: ...
 
@@ -45,6 +46,11 @@ class AnthropicModel:
         self.name, self.model_id, self.max_tokens, self.price = name, model_id, max_tokens, price
         # max_retries=0: complete_with_retries is the only retry layer, so max_retries in config means what it says.
         self.client = anthropic.Anthropic(api_key=os.environ[provider["api_key_env"]], max_retries=0)
+        try:
+            self.context_window = self.client.models.retrieve(model_id).max_input_tokens
+        except Exception as error:
+            print(f"  {name}: could not read the context window ({error})")
+            self.context_window = None
 
     def complete(self, system: str, user: str, schema: dict | None = None) -> Reply:
         # Every current Claude model enforces a JSON schema, so it is always sent.
@@ -69,10 +75,13 @@ class OpenAICompatibleModel:
         self.name, self.model_id, self.max_tokens, self.price = name, model_id, max_tokens, price
         self.max_tokens_param = provider.get("max_tokens_param", "max_tokens")
         self.extra_body = provider.get("extra_body", {})   # provider-specific request fields from config
-        self.output = output_mode(supported_parameters(provider.get("endpoints_url"), model_id))
-        print(f"  {name}: {self.output} output")
         self.client = openai.OpenAI(api_key=os.environ[provider["api_key_env"]], base_url=provider.get("base_url"),
                                     max_retries=0)
+        endpoints = model_endpoints(provider.get("endpoints_url"), model_id)
+        self.output = output_mode(supported_parameters(endpoints))
+        self.context_window = (max((e.get("context_length") or 0 for e in endpoints), default=0) or None
+                               if endpoints is not None else listed_context_window(self.client, model_id))
+        print(f"  {name}: {self.output} output")
 
     def complete(self, system: str, user: str, schema: dict | None = None) -> Reply:
         options = {self.max_tokens_param: self.max_tokens}
@@ -106,13 +115,9 @@ def output_mode(supported: set[str] | None) -> str:
     return "json" if "response_format" in supported else "text"
 
 
-def supported_parameters(endpoints_url: str | None, model_id: str) -> set[str] | None:
-    """Parameters any provider serving this model supports, from OpenRouter's per-model endpoints API.
-
-    Any provider is enough: with require_parameters (set for OpenRouter in config.yaml), OpenRouter routes only to
-    providers that support the request.
-    None if the provider has no endpoints_url (nothing to ask). Empty if the lookup fails, which safely
-    falls back to no schema.
+def model_endpoints(endpoints_url: str | None, model_id: str) -> list[dict] | None:
+    """The hosts serving this model, from OpenRouter's per-model endpoints API: each lists its supported_parameters
+    and context_length. None if the provider has no endpoints_url (nothing to ask); empty if the lookup fails.
 
     Not cached, on purpose. We considered downloading OpenRouter's full model list once and caching it,
     but with one student and one teacher a single per-model request is simpler and lighter. Revisit
@@ -123,11 +128,32 @@ def supported_parameters(endpoints_url: str | None, model_id: str) -> set[str] |
     url = endpoints_url.format(model=model_id)
     try:
         with urllib.request.urlopen(url, timeout=30) as response:
-            endpoints = json.load(response)["data"]["endpoints"]
+            return json.load(response)["data"]["endpoints"]
     except Exception as error:
         print(f"  could not read {url} ({error}); assuming no structured output")
-        return set()
+        return []
+
+
+def supported_parameters(endpoints: list[dict] | None) -> set[str] | None:
+    """Parameters any host serving the model supports. Any host is enough: with require_parameters (set for
+    OpenRouter in config.yaml), OpenRouter routes only to hosts that support the request. None when there was
+    nothing to ask; empty if the lookup failed, which safely falls back to no schema."""
+    if endpoints is None:
+        return None
     return {param for endpoint in endpoints for param in endpoint.get("supported_parameters") or []}
+
+
+def listed_context_window(client: openai.OpenAI, model_id: str) -> int | None:
+    """The context window from the provider's model list, for providers that publish one there (Groq does, as
+    context_window; OpenAI does not). None if it isn't listed."""
+    try:
+        for model in client.models.list().data:
+            if model.id == model_id:
+                extra = model.model_dump()
+                return extra.get("context_window") or extra.get("context_length")
+    except Exception:
+        pass
+    return None
 
 
 PROVIDER_TYPES = {"anthropic": AnthropicModel, "openai_compatible": OpenAICompatibleModel}

@@ -4,6 +4,8 @@ import argparse
 
 from scanner.config import load_config, resolve
 from scanner.ingest.app import load_app
+from scanner.analysis.scan import scan_prompt
+from scanner.llm.context import estimate_tokens
 from scanner.pipeline import STEPS, run
 from scanner.scoring.report import write_report
 
@@ -27,7 +29,8 @@ def main() -> None:
         print(f"Code:      {len(app.sources)} files")
         print(f"Resources: {', '.join(app.resources) or 'none'}")
         print(f"Libraries: {len(app.libraries)}")
-        print(f"Prompt:    ~{len(app.to_prompt()) // 4:,} tokens")
+        print(f"Prompt:    up to ~{estimate_tokens(''.join(scan_prompt(app))):,} tokens (upper estimate; checked "
+              "against each model's context window before a run)")
         return
     if args.force and args.step not in (None, "teacher"):
         parser.error("--force only applies to the teacher step")
