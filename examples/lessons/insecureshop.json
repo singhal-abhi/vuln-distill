@@ -1,0 +1,106 @@
+{
+  "teacher": "anthropic/claude-haiku-5-5",
+  "lessons": [
+    {
+      "rule": "A release build must not ship with the debuggable flag enabled, because it lets anyone with a debugger or adb access attach to the process and read or change its memory and state.",
+      "what_to_check": "Search AndroidManifest.xml and any merged manifest for android:debuggable set to true on the application element, and check build.gradle for debuggable true in release build types or overrides.",
+      "why": "An attacker with physical or adb access can attach a debugger, dump memory, and modify runtime behavior to bypass checks. The safe version leaves debuggable unset or false in release builds and relies on the build type default."
+    },
+    {
+      "rule": "Backup and cleartext network settings in the manifest widen the exposure of local data and network traffic, so they should be explicitly restricted.",
+      "what_to_check": "Look for android:allowBackup set to true or left at the default on targetSdk below 31, android:usesCleartextTraffic set to true, and a missing networkSecurityConfig that permits cleartext domains. Check the targetSdk value too.",
+      "why": "Backups can be pulled with adb to extract shared preferences and databases, and cleartext HTTP lets a network attacker read or alter traffic. The safe version sets allowBackup to false or limits it with backup rules, disables cleartext, and uses a network security config that only allows cleartext where truly needed."
+    },
+    {
+      "rule": "Secrets such as passwords, API keys, tokens, and signing material must never be embedded as literals in an APK, because the APK can be decompiled and the values recovered.",
+      "what_to_check": "Search decompiled code and resources for string literals assigned to key, token, secret, password, credential, or auth variables, for maps or constant tables that hold login pairs, and for keys passed to crypto or HTTP client constructors.",
+      "why": "Anyone can unzip and decompile an APK to read embedded secrets and reuse them against the backend. The safe version keeps secrets on the server, issues short-lived tokens after authentication, or retrieves them from the Android Keystore at runtime."
+    },
+    {
+      "rule": "Logging calls must not write credentials, tokens, or other personal data, because logs are readable by other apps with READ_LOGS and by anyone with adb logcat access.",
+      "what_to_check": "Search for Log.v, Log.d, Log.i, Log.w, Log.e, Timber, println, and similar logging calls whose arguments include variables named password, token, session, secret, or user identifiers, including logs in authentication and form-submission handlers. Check whether release builds strip logs through R8 or ProGuard rules.",
+      "why": "On older Android versions or with READ_LOGS granted, other processes or a connected computer can read the logged values in plaintext. The safe version never logs secrets and wraps debug logging in a debuggable check or strips it at build time."
+    },
+    {
+      "rule": "Sensitive values kept in SharedPreferences or other plain files are readable in the clear, so they must be encrypted or kept out of storage altogether.",
+      "what_to_check": "Search for getSharedPreferences, getPreferences, edit().putString, and file writes that store keys like password, token, or session. Check whether MODE_WORLD_READABLE or MODE_WORLD_WRITEABLE is used, and whether EncryptedSharedPreferences or the Keystore is involved.",
+      "why": "Combined with backup extraction, root, or a debuggable build, an attacker can read the XML file directly and obtain the stored values. The safe version uses EncryptedSharedPreferences or Keystore-backed encryption, stores only short-lived tokens, and excludes sensitive files from backup."
+    },
+    {
+      "rule": "A ContentProvider that is exported, or reachable by other apps, must enforce a permission that other apps cannot trivially obtain, and its query path must never return secrets.",
+      "what_to_check": "Check every provider element in the manifest for android:exported, android:readPermission, android:writePermission, and android:permission. Look for custom permissions declared with protectionLevel normal or dangerous, which any app can request. Read query, openFile, and call implementations for returns of credentials or tokens, and for providers that are not in the manifest but are registered in code.",
+      "why": "Any app that declares the permission can read the data through the provider's query method and exfiltrate it. The safe version keeps providers unexported, uses signature-level permissions, and never returns secrets through query."
+    },
+    {
+      "rule": "FileProvider path configuration must map only the narrow directories that need sharing, because broad roots let other apps receive URI grants to any file under them.",
+      "what_to_check": "Open res/xml files referenced by FileProvider meta-data and look for root-path elements or paths set to slash, the storage root, or the whole app data directory. Also check whether grantUriPermissions or Intent.FLAG_GRANT_READ_URI_PERMISSION is used with broad paths.",
+      "why": "A URI grant on a broad root exposes every file in that tree to the receiving app, which can then read or write private files. The safe version lists specific subdirectories, uses cache or files paths with the smallest scope, and grants permissions only for the single URI being shared."
+    },
+    {
+      "rule": "A WebView or HTTP client must not override SSL certificate error handling to proceed, because that disables certificate validation and enables man-in-the-middle attacks.",
+      "what_to_check": "Search for overrides of onReceivedSslError in WebViewClient that call handler.proceed(), and for custom X509TrustManager implementations with empty checkServerTrusted, HostnameVerifier implementations that return true, and SSLContext.init calls with a permissive trust manager.",
+      "why": "A network attacker presents a forged certificate, the app accepts it, and the attacker can read and modify the traffic. The safe version cancels the request on SSL error or relies on the system trust store and certificate pinning through a network security config."
+    },
+    {
+      "rule": "WebView settings that give loaded content access to file URLs or cross-origin resources turn any injected or attacker-chosen page into a local data-theft tool, so they must be disabled.",
+      "what_to_check": "Search for setAllowUniversalAccessFromFileURLs(true), setAllowFileAccessFromFileURLs(true), setAllowFileAccess(true), setAllowContentAccess(true), and setJavaScriptEnabled(true). Check whether any WebView that enables JavaScript can load file URLs or content URLs from app storage.",
+      "why": "JavaScript running in a page loaded from a file or content URL can read other local files or make cross-origin requests and send the data out. The safe version keeps these settings false, loads only trusted bundled HTML, and avoids enabling JavaScript for pages that do not need it."
+    },
+    {
+      "rule": "Any URL that reaches a WebView or browser from an exported component or incoming intent must be validated against an allowlist, because otherwise an external caller chooses what the app loads with its privileges.",
+      "what_to_check": "Find exported or browsable activities and check their intent-filter elements for android:scheme and android:host. In their onCreate or onNewIntent, trace getIntent().getDataString(), getStringExtra, getData(), or Bundle values into loadUrl, loadData, or a navigation call. Check whether the WebView also has JavaScript enabled.",
+      "why": "An attacker app or a crafted web link can send a URL the app then loads in its own origin with its JavaScript and cookies available. The safe version checks the scheme and host against a fixed allowlist, rejects javascript: and file: schemes, and does not load URLs taken straight from the intent."
+    },
+    {
+      "rule": "Starting an activity from a nested Intent or Parcelable extra supplied by a caller lets that caller launch components it could not reach directly, so such extras must be treated as untrusted.",
+      "what_to_check": "Search for getParcelableExtra, getParcelable, getSerializableExtra, or getStringExtra results passed to startActivity, startService, sendBroadcast, or setResult. Look at whether the extra Intent is validated for component name or package, and whether the activity is exported.",
+      "why": "An attacker can nest an Intent that targets a non-exported or privileged activity of the victim app, and because the call comes from the victim, the access check is bypassed. The safe version resolves the target against an allowlist, clears FLAG_GRANT flags, and sets the component explicitly to a known class."
+    },
+    {
+      "rule": "Implicit broadcasts deliver their extras to any app that registers a matching receiver, so sensitive data must never be sent this way.",
+      "what_to_check": "Find sendBroadcast, sendOrderedBroadcast, and sendStickyBroadcast calls whose extras include credentials, tokens, or personal data. Check whether setPackage, an explicit component, or a receiver permission restricts delivery.",
+      "why": "Any app can register for the same action string and read the extras in plaintext. The safe version uses explicit intents with setPackage, a signature-level permission on the broadcast, or a local broadcast manager, and it never includes secrets in the extras."
+    },
+    {
+      "rule": "A broadcast receiver that is registered without a permission, or that is exported, can be triggered by any app, so its extras and the actions it performs must be validated.",
+      "what_to_check": "Search for registerReceiver calls and check whether a permission argument is passed. On Android 13 and later, check whether RECEIVER_EXPORTED or RECEIVER_NOT_EXPORTED is specified. Check the manifest receiver elements for android:exported and permission. In onReceive, trace extras into startActivity, file paths, or URL loads.",
+      "why": "Any installed app can send an intent with a matching action and attacker-chosen extras, which then drive activity launches, file writes, or page loads. The safe version protects the receiver with a signature permission or sets it not exported, and validates every extra before acting on it."
+    },
+    {
+      "rule": "A file name or path taken from an intent or an external string must be canonicalized and confined to a fixed directory before it is used to create, open, or copy a file, because path traversal sequences can escape that directory.",
+      "what_to_check": "Search for new File(dir, name), new File(string), FileOutputStream, createNewFile, Uri.fromFile, and Uri.parse with paths coming from getIntent, getExtras, ClipData, or a content URI's display name. Check for getCanonicalPath or normalize checks that confirm the result still starts with the intended directory.",
+      "why": "A sender can supply a name containing sequences like parent-directory references, or an absolute path, to write or read files outside the intended folder, including private app files. The safe version strips path separators from names, compares canonical paths against the base directory, and copies content through the ContentResolver instead of trusting raw paths."
+    },
+    {
+      "rule": "Returning the incoming Intent as a result, or echoing caller-supplied extras back, leaks whatever the caller or an earlier component put into it to the calling app.",
+      "what_to_check": "Search for setResult calls that pass getIntent() or a bundle of extras, and for activities that are exported and return data they received.",
+      "why": "The calling app receives the full Intent, including extras that may contain private data or grant flags. The safe version returns only a small, explicitly built result with no sensitive values."
+    },
+    {
+      "rule": "Loading code from another installed package with createPackageContext and class loading is a code injection vector, because any app with a matching package name can supply the code that runs in your process.",
+      "what_to_check": "Search for createPackageContext with CONTEXT_INCLUDE_CODE or CONTEXT_IGNORE_SECURITY flags, DexClassLoader or PathClassLoader built from external paths, and loadClass or reflection calls that target classes in other packages. Check any package-name prefix checks used as trust decisions.",
+      "why": "Any app installed on the device whose package name matches the expected pattern can run its code inside your process with your context, which is a full code-execution compromise. The safe version does not load code from other packages, and it communicates through exported services with signature permissions or through explicit, verified APIs."
+    },
+    {
+      "rule": "Authentication decisions must never be made in the client, because the client can be decompiled, patched, or bypassed, and the comparison itself must not depend on plaintext values held in the app.",
+      "what_to_check": "Search for login or verify functions that compare user input against literal values or locally stored credentials, for boolean checks in the UI layer that gate access, and for equals or constant-value comparisons on secrets instead of server verification.",
+      "why": "An attacker can patch the check out of the APK or read the expected value from the code and skip the gate. The safe version verifies credentials on a server, uses hashed and salted values where local checks are unavoidable, and compares secrets in constant time with MessageDigest.isEqual."
+    },
+    {
+      "rule": "Permissions requested in the manifest should be limited to what the app's features need, because each extra permission widens what a compromised app or a malicious component can reach.",
+      "what_to_check": "Review uses-permission entries and compare them against the features and the APIs actually called. Flag contacts, location, storage, and broad external storage permissions with no matching code path, and check whether READ_EXTERNAL_STORAGE or MANAGE_EXTERNAL_STORAGE are used where scoped storage or the photo picker would suffice.",
+      "why": "Unused permissions give a compromised process access to data it never needed, and they increase the impact of any other vulnerability. The safe version removes unused permissions and uses scoped alternatives such as the storage access framework."
+    },
+    {
+      "rule": "Activities exported with broad or generic intent filters, such as those for receiving shared content, accept data from any app and must validate the type, source, and size of what they accept before acting on it.",
+      "what_to_check": "Check manifest intent-filter entries for SEND, SEND_MULTIPLE, VIEW, or other generic actions on exported activities, and trace the data they read (getClipData, EXTRA_STREAM, getData) into file copies, uploads, or URL loads. Check whether the activity requires a permission or calling-package check.",
+      "why": "Any app can send arbitrary content to the activity, which can cause the app to copy or process files it should not touch. The safe version limits the MIME types, verifies the sender or requires a permission, and copies only validated content into private storage."
+    }
+  ],
+  "rejected": [],
+  "usage": {
+    "input_tokens": 5461,
+    "output_tokens": 5441,
+    "cost": 0.0032665999999999997
+  }
+}

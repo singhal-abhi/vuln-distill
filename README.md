@@ -115,7 +115,8 @@ independent of each other and could run in parallel on a paid tier.
 - **Classify (scoring only):** a fixed classifier model maps each finding onto `categories` in `config.yaml`, the
   same names the answer keys use. Scanning models never see this list.
 - **Lessons:** the teacher writes rules meant for any Android app. The prompt forbids naming or describing the app,
-  and lessons that name its package or classes are rejected in code.
+  and lessons that name its package or classes are rejected in code. The final lessons for the three test apps are in
+  [`examples/lessons/`](examples/lessons/).
 - **Score:** a finding counts when its category and its file match a reference entry (an answer-key entry, or one of
   the teacher's findings when there is no key), one finding per entry. The number that matters is the student's score
   with lessons minus without.
@@ -131,4 +132,5 @@ independent of each other and could run in parallel on a paid tier.
 | [`scanner/scoring/`](scanner/scoring/) | Matching against the answer key, the report |
 | [`apps/`](apps/) | Per-app settings for apps other than the default |
 | [`ground_truth/`](ground_truth/) | Answer keys |
+| [`examples/lessons/`](examples/lessons/) | The teacher's final lessons for each test app, behind the write-up's results |
 | [`tests/`](tests/) | Unit tests |

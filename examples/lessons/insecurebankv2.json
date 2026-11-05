@@ -1,0 +1,91 @@
+{
+  "teacher": "anthropic/claude-haiku-5-5",
+  "lessons": [
+    {
+      "rule": "An app that is marked debuggable or allows backups exposes its private data and runtime state to anyone with USB, adb, or backup access, so release builds must not set these flags.",
+      "what_to_check": "In AndroidManifest.xml check the application element for android:debuggable set to true and android:allowBackup left true or unset (the default was true before API 31). Also check for android:fullBackupContent or dataExtractionRules that include sensitive files. Confirm the release build variant in build.gradle does not override these values.",
+      "why": "An attacker with physical or adb access can attach a debugger to a debuggable app or run adb backup to copy its shared preferences and databases off the device. Safe versions set debuggable false, set allowBackup false or exclude sensitive paths with backup rules, and keep secrets out of files that get copied."
+    },
+    {
+      "rule": "Cryptographic keys and IVs must never be hardcoded in the app, because anyone who decompiles the APK can recover them and decrypt everything the app protects.",
+      "what_to_check": "Search decompiled code for Cipher.getInstance, SecretKeySpec, IvParameterSpec, GCMParameterSpec, and literal byte arrays or string constants passed to them. Flag fixed IVs or nonces, especially with CBC or GCM. Check whether the key is derived from a constant with no per-user or device-bound secret.",
+      "why": "Once the key is found, every value encrypted with it can be decrypted offline, and a fixed IV makes identical plaintexts produce identical ciphertexts and can break GCM outright. Safe versions generate keys in the Android Keystore with KeyGenParameterSpec, which keeps key material non-exportable, and generate a fresh random IV for each encryption."
+    },
+    {
+      "rule": "Encrypting a secret with a key that the app itself can use is not protection, so credentials should not be stored in a reversible form at all.",
+      "what_to_check": "Look at what is written to SharedPreferences, files, or databases, especially values with names suggesting passwords, tokens, or PINs. Check whether the value is encrypted with a key the app can reach, or only Base64-encoded or XOR-ed. Also check whether the stored value is the plaintext secret rather than a salted hash or a short-lived token.",
+      "why": "A local attacker or someone with a backup can read the stored file and reverse the transform, recovering the plaintext secret. Safe versions store a salted one-way hash for verification, or keep only a revocable session token, and use Keystore-backed encryption where a reversible value is truly needed."
+    },
+    {
+      "rule": "Network traffic that carries credentials or session data must use TLS, because cleartext HTTP lets any network observer read or modify it.",
+      "what_to_check": "Search for string literals beginning with http:// and for URL builders that concatenate a scheme. Check AndroidManifest.xml for android:usesCleartextTraffic set to true and for a networkSecurityConfig that permits cleartext domains. Look at WebView loadUrl calls and HttpURLConnection or OkHttp URLs built at runtime from user-supplied hosts.",
+      "why": "A man-in-the-middle on public Wi-Fi or a compromised router can capture or alter passwords and tokens sent over HTTP. Safe versions use https:// for every endpoint, disable cleartext traffic in the manifest and network security config, and pin certificates where the threat model requires it."
+    },
+    {
+      "rule": "Secrets such as passwords, tokens, and personal data must never be written to logs or standard output, because logs can be read by other apps or by anyone with log access.",
+      "what_to_check": "Search for android.util.Log calls (d, i, v, w, e), System.out.println, System.err, and Timber or other logging wrappers. Inspect their arguments for variables named like password, token, secret, key, or credential, and for objects whose toString includes such fields. Check whether logging is enabled in release builds.",
+      "why": "On older Android versions any app with READ_LOGS permission could read the log, and on debuggable builds adb logcat exposes it to anyone with access. Safe versions remove secret-bearing logs from release code, use a logging library that strips debug output in release builds, and log only non-sensitive identifiers."
+    },
+    {
+      "rule": "An exported component with no permission requirement can be started or messaged by any installed app, so every exported activity, service, receiver, or provider must check what callers are allowed to do.",
+      "what_to_check": "In AndroidManifest.xml find every activity, service, receiver, and provider with android:exported set to true, or with an intent-filter and no exported attribute (which is implicitly exported before API 31). Check for android:permission, android:permission on intent filters, and runtime checks such as checkCallingPermission or getCallingUid inside the component.",
+      "why": "A malicious app can launch an exported activity directly with crafted extras to skip the login flow or reach sensitive screens, or send a broadcast that triggers privileged actions. Safe versions set exported to false for internal components, protect exported ones with signature-level permissions, and verify the caller and the extras before acting."
+    },
+    {
+      "rule": "A broadcast receiver that is exported or receives implicit broadcasts must treat all incoming extras as attacker-controlled, and must never use them to choose a destination for a costly or sensitive action.",
+      "what_to_check": "Find BroadcastReceiver subclasses and their onReceive methods. Check intent.getStringExtra or getExtras values flowing into SmsManager.sendTextMessage or sendMultipartTextMessage, into network requests, or into file writes. Check whether the receiver is registered in the manifest with exported true or registered at runtime without RECEIVER_NOT_EXPORTED or a permission.",
+      "why": "An attacker app can send the intent with its own phone number or URL, causing the victim device to send messages, incur charges, or leak data to the attacker. Safe versions make the receiver non-exported, require a signature permission, validate the sender, and never pass caller-supplied destinations straight into premium or sensitive operations."
+    },
+    {
+      "rule": "Sensitive data must not be sent in implicit broadcasts without a permission, because any app that registers for the action can receive it.",
+      "what_to_check": "Search for sendBroadcast, sendOrderedBroadcast, and LocalBroadcastManager usage, and check whether the Intent has an explicit component (setPackage or setComponent) or only an action string. Look for putExtra calls carrying secrets in those intents, and check whether the sendBroadcast overload with a receiverPermission is used.",
+      "why": "Any installed app can register an intent filter for the same action and read the extras, so secrets leak to other apps. Safe versions use an explicit intent with setPackage, use LocalBroadcastManager or a private in-process channel, or pass only non-sensitive references."
+    },
+    {
+      "rule": "A content provider that is exported without permissions lets any app read, write, and delete its data, and provider query selections built from caller input can inject SQL.",
+      "what_to_check": "In AndroidManifest.xml check provider elements for android:exported true and for missing readPermission, writePermission, or permission attributes, and check grantUriPermissions. In provider code, inspect query, update, and delete for selection and sortOrder arguments passed straight from the caller to SQLiteQueryBuilder.query or db.query, and for string concatenation into selection clauses.",
+      "why": "An attacker app can call the provider to read or tamper with the stored rows, and a crafted selection or sort clause can read beyond the intended rows or alter the query. Safe versions restrict the provider with signature permissions, use parameterized selections with selectionArgs, whitelist allowed column names in projection and sortOrder, and never concatenate caller input into SQL."
+    },
+    {
+      "rule": "A WebView that loads content chosen by an intent or other external input, with JavaScript or file access enabled, can be made to read local files or run script in the app's origin.",
+      "what_to_check": "Search for WebView loadUrl and loadDataWithBaseURL calls, and check whether their URL or path includes data from getIntent, getStringExtra, deep link query parameters, or content provider results. Check WebSettings for setJavaScriptEnabled(true), setAllowFileAccess, setAllowFileAccessFromFileURLs, setAllowUniversalAccessFromFileURLs, and addJavascriptInterface.",
+      "why": "A caller can supply a path with traversal sequences or a file:// scheme to load unintended local files, and with file access and JavaScript enabled the page can read them or call exposed bridges. Safe versions avoid building file URLs from input, canonicalize and validate any file path against an allowed directory, disable file access, and load only trusted fixed content."
+    },
+    {
+      "rule": "A WebView link handler that loads every URL it receives, instead of restricting navigation to trusted hosts and schemes, lets hostile page content drive the WebView to arbitrary destinations.",
+      "what_to_check": "Find WebViewClient subclasses that override shouldOverrideUrlLoading and check whether they call view.loadUrl(url) and return true for every URL. Check whether the scheme is limited to https and the host to an allowlist, and whether file:, javascript:, or intent: schemes are blocked.",
+      "why": "A malicious or compromised page can navigate the WebView to file URLs or attacker sites, which may then use exposed JavaScript bridges or local file access. Safe versions allow only expected hosts over https, return false for other URLs or hand them to an external browser, and never blindly load what the page asks for."
+    },
+    {
+      "rule": "Writing sensitive files to external storage makes them readable and modifiable by any app holding storage permission, so private data belongs in the app's internal storage.",
+      "what_to_check": "Search for Environment.getExternalStorageDirectory, getExternalFilesDir used for private data, FileWriter or FileOutputStream opened on paths under /sdcard or external storage, and MediaStore inserts of private content. Check for WRITE_EXTERNAL_STORAGE or READ_EXTERNAL_STORAGE permissions and for legacy requestLegacyExternalStorage.",
+      "why": "Any app with storage permission can read or change files on shared storage, which also survives uninstall and is visible to other users on the device. Safe versions write to Context.getFilesDir or Context.getCacheDir, set file permissions to private mode, and encrypt anything that must persist."
+    },
+    {
+      "rule": "Secrets passed between components in intent extras can be observed or read by other apps, so credentials should not travel through intents at all.",
+      "what_to_check": "Search for putExtra calls whose names or values relate to passwords, tokens, PINs, or keys, and for Bundle entries carrying such values. Check whether the target activity is exported and whether the intent is implicit. Look at PendingIntent extras as well.",
+      "why": "Other apps can inspect recent task intents on some versions, read extras from exported components, or intercept implicit intents, which exposes the secret. Safe versions pass only opaque references or short-lived tokens, keep the data in-process in a ViewModel or singleton, and make target components non-exported."
+    },
+    {
+      "rule": "Hardcoded special-case accounts or alternate endpoints that bypass the normal authentication path are backdoors, and a client that contains them reveals them to anyone who decompiles the app.",
+      "what_to_check": "Search decompiled code for equals or contains comparisons against literal usernames, IDs, or roles that change the URL, the request body, or the auth flow. Look for hidden or debug endpoints referenced only in the client code, and for flags that skip server checks.",
+      "why": "An attacker who finds the special case can use the alternate route, which may skip rate limits or authorization checks on the server. Safe versions have no client-side special cases, and the server enforces authentication and authorization for every route, with debug endpoints removed from production builds."
+    },
+    {
+      "rule": "Root or tamper detection implemented only on the device is trivially bypassed, so it must not be relied on as a security control.",
+      "what_to_check": "Search for checks for su binaries, Superuser or Magisk packages, build tags such as test-keys, Build.TAGS, and file existence checks. Look for code paths where the result alone decides whether sensitive features are allowed, and check whether the server also verifies integrity.",
+      "why": "A rooted attacker can hide files, hook the check, or modify the return value, so the result cannot be trusted. Safe versions use Play Integrity or attestation verified on the server, and still enforce security on the server side rather than trusting the client's report."
+    },
+    {
+      "rule": "An outdated targetSdkVersion makes the platform keep legacy behavior that removes modern security defaults, so the app should target a current API level.",
+      "what_to_check": "In AndroidManifest.xml check android:targetSdkVersion, and in build.gradle check targetSdk. Compare the value against the current required minimum for the store, and look for legacy flags that the old target enables such as legacy external storage or cleartext defaults.",
+      "why": "Older target levels skip runtime permission prompts, keep permissive defaults for exported components, and skip hardening introduced in newer releases, so the app inherits weaknesses the platform has since fixed. Safe versions target the current API level and opt into secure defaults explicitly."
+    }
+  ],
+  "rejected": [],
+  "usage": {
+    "input_tokens": 5420,
+    "output_tokens": 5027,
+    "cost": 0.0030555
+  }
+}

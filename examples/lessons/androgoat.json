@@ -1,0 +1,91 @@
+{
+  "teacher": "anthropic/claude-haiku-5-5",
+  "lessons": [
+    {
+      "rule": "Any manifest with debuggable set to true or allowBackup left at its default true in a release build exposes app data and runtime state to anyone with adb access or a debugger.",
+      "what_to_check": "Inspect AndroidManifest.xml and the application element for android:debuggable and android:allowBackup, and check whether build variants or flavors override them. Also check for android:fullBackupContent or dataExtractionRules that restrict what is backed up.",
+      "why": "An attacker with physical or adb access can attach a debugger to a debuggable process or run adb backup to pull databases, preferences and files. The safe version sets debuggable false for release builds, sets allowBackup false or defines explicit backup rules that exclude secrets, and never ships secrets in data the backup can capture."
+    },
+    {
+      "rule": "Any credential, API key, signing secret or access key compiled into an APK or its resources can be recovered by anyone who decompiles the app, so it must never be embedded in client code.",
+      "what_to_check": "Search decompiled code, string resources, BuildConfig fields, assets, and native libraries for string literals that look like keys or tokens (long random strings, prefixes used by cloud or AI providers, base64 blobs), and for constants named like key, secret, token, password or apiKey.",
+      "why": "Once extracted, the secret lets an attacker act as the app's backend or as the vendor account, which can mean billing abuse or full access to cloud resources. The safe version keeps long-lived secrets on a server, issues short-lived scoped tokens to the client, and rotates any key that has shipped."
+    },
+    {
+      "rule": "Secrets, passwords, tokens or internal keys must not be written to logs, shown in toasts or dialogs, or placed in UI text, because those outputs are readable by other apps and by anyone attached over adb.",
+      "what_to_check": "Search for Log.d, Log.i, Log.v, Log.e, System.out.println, Timber or other logging calls, and for Toast, AlertDialog or TextView calls whose arguments include variables named password, token, key, secret, pin or credential. Include logs that print the full value of a request or response object.",
+      "why": "Logcat historically exposed logs to apps holding READ_LOGS or to any attached debugger, and screen content can be captured by overlays or accessibility services. The safe version logs only non-sensitive identifiers, strips secrets before logging, and gates debug output behind BuildConfig.DEBUG."
+    },
+    {
+      "rule": "An exported component with no permission requirement can be invoked by any installed app or by a web page, so every exported activity, service, receiver or provider must enforce its own authorization.",
+      "what_to_check": "In AndroidManifest.xml look for activity, service, receiver and provider elements with android:exported set to true, or with an intent-filter (which implies exported on older API levels), and check for android:permission, android:readPermission, android:writePermission or signature-level protection. Then check whether the component's code trusts the caller or the incoming extras.",
+      "why": "A malicious app can send explicit intents or broadcasts to the component and drive its behavior, leaking data or performing privileged actions. The safe version sets exported false when not needed, requires a signature or custom permission for internal IPC, and validates the caller with checkCallingPermission or getCallingPackage where appropriate."
+    },
+    {
+      "rule": "A deep link or implicit intent that reaches a sensitive screen must not be trusted to have passed the checks that the normal navigation path performs, such as login, PIN or confirmation steps.",
+      "what_to_check": "Find intent-filter entries with the VIEW action, BROWSABLE category and custom or http schemes and hosts, then trace whether the target activity reads data from getIntent().getData(), extras, or getQueryParameter and whether the gate (PIN, login, session check) is in the caller or in the target. Check onCreate and onResume of the target for guards.",
+      "why": "Any web page or other app can open the URI and skip the caller-side gate, reaching the protected screen directly. The safe version enforces the authentication check inside the destination activity itself, re-verifies session state on every entry, and treats all URI parameters as untrusted."
+    },
+    {
+      "rule": "A content provider that is exported without read and write permissions exposes its tables to every app, and any selection or path segment built by string concatenation is also a SQL injection point.",
+      "what_to_check": "Check provider declarations for android:exported, android:readPermission, android:writePermission and android:grantUriPermissions. In query, update and delete methods, look for appendWhere, selection strings built with plus operators, and getLastPathSegment or getPathSegments used directly in SQL.",
+      "why": "Other apps can read or modify the data, and an injected selection can expose or change rows beyond what the path intended. The safe version requires a signature or custom permission, uses parameterized selection with selectionArgs, whitelists the URI matcher paths, and never builds WHERE clauses from URI segments."
+    },
+    {
+      "rule": "Raw SQL built by concatenating user-controlled strings into rawQuery, execSQL, or a where clause allows SQL injection, which can bypass logic and dump or alter every row.",
+      "what_to_check": "Search for SQLiteDatabase.rawQuery, execSQL, query with selection arguments built by concatenation, and Room @RawQuery or string-built queries. Trace each variable back to EditText.getText, Intent extras, deep link parameters, or provider URIs.",
+      "why": "A quote character plus a boolean clause can return every row for a login-style query or corrupt data during inserts. The safe version uses parameterized queries with ? placeholders and selectionArgs, and Room @Query with bind parameters."
+    },
+    {
+      "rule": "Runtime.exec or ProcessBuilder given a single string that includes user input allows OS command injection through shell metacharacters or added arguments.",
+      "what_to_check": "Search for Runtime.getRuntime().exec, ProcessBuilder, and Process creation where the command is a concatenated String rather than a fixed argument array. Check whether the input reaches the command from EditText, intents, or network responses, and whether any shell (sh, su, -c) is invoked.",
+      "why": "String.split on whitespace does not neutralize separators such as semicolons, pipes or backticks, so an attacker can append a second command. The safe version avoids spawning processes for tasks an API can do, passes fixed argument arrays with validated input, and never invokes a shell."
+    },
+    {
+      "rule": "A WebView with JavaScript enabled that renders attacker-influenced text as HTML, through loadData, loadDataWithBaseURL, or document.write, allows cross-site scripting inside the app's context.",
+      "what_to_check": "Search for WebSettings.setJavaScriptEnabled(true), loadData, loadDataWithBaseURL and evaluateJavascript, and check whether any string concatenated into the HTML comes from user input, scanned codes, intents, or remote responses without HTML escaping. Also look for addJavascriptInterface exposing objects to the page.",
+      "why": "Injected markup executes script in the WebView, where it can call JavaScript interfaces or load attacker content. The safe version escapes text before inserting it into HTML, keeps JavaScript disabled unless required, and uses textContent or proper templating instead of innerHTML or document.write."
+    },
+    {
+      "rule": "WebView settings that enable file access, content access, or universal access from file URLs let loaded pages read local files and cross-origin data, so these flags must stay off unless strictly required.",
+      "what_to_check": "Search for setAllowFileAccess, setAllowContentAccess, setAllowFileAccessFromFileURLs, setAllowUniversalAccessFromFileURLs and loadUrl calls. Check whether the URL originates from intents, deep links, or user input and whether a scheme allowlist is enforced.",
+      "why": "A page loaded through an attacker-controlled URL or injected script can read app-private files, and universal access allows reading other origins. The safe version disables these flags, restricts navigation to an https host allowlist, and overrides shouldOverrideUrlLoading to block unexpected schemes."
+    },
+    {
+      "rule": "Authentication state, PIN verification, admin roles and similar access decisions stored as a plain boolean or flag in SharedPreferences or a constant field can be changed by anyone with file access or by patching the app.",
+      "what_to_check": "Search for getBoolean, getString or int reads from SharedPreferences, and for static final or instance boolean fields named admin, isLoggedIn, verified, unlocked, or premium that gate UI or features. Check whether the value is enforced by a server or a Keystore-backed key or is only used to show or hide views.",
+      "why": "A rooted device, a backup, or a runtime hook can flip the flag and bypass the gate. The safe version derives access from a server-side decision or a hardware-backed Keystore key that is only released after successful authentication, and re-checks authorization for each protected operation."
+    },
+    {
+      "rule": "Biometric or other local authentication whose success callback only changes UI does not protect anything, because the callback can be hooked; real protection requires a Keystore key that requires user authentication to unlock.",
+      "what_to_check": "Search for BiometricPrompt, FingerprintManager, and onAuthenticationSucceeded handlers. Check whether the CryptoObject is used, whether the Keystore key has setUserAuthenticationRequired(true), and whether protected data is decrypted only after success.",
+      "why": "Hooking the success callback with a dynamic instrumentation tool skips the check entirely when no cryptographic operation depends on it. The safe version binds authentication to a CryptoObject and uses the resulting key to decrypt or sign the protected data."
+    },
+    {
+      "rule": "Passwords and PINs hashed with MD5 or SHA-1 without a per-user salt and a slow key derivation function can be recovered quickly from a stolen hash, especially when the secret space is small.",
+      "what_to_check": "Search for MessageDigest.getInstance with MD5, SHA-1 or SHA-256 used for credentials, and check whether a random salt is generated and stored and whether PBKDF2, bcrypt, scrypt or Argon2 is used. Consider the entropy of the input space, since short numeric secrets are trivially enumerable.",
+      "why": "An attacker who gets the stored hash can compute candidates offline at high speed or look them up in precomputed tables. The safe version uses a memory-hard or iterated KDF with a random salt, or better, avoids storing a reversible verifier on the device at all."
+    },
+    {
+      "rule": "Sensitive data written to shared preferences, databases, external storage, or temp files without encryption, or with world-readable or world-writable file modes, can be read by other apps, by users with storage access, or from backups.",
+      "what_to_check": "Search for SharedPreferences putString of passwords or tokens, File.setReadable(true, false), setWritable(true, false), MODE_WORLD_READABLE, MODE_WORLD_WRITABLE, getExternalFilesDir or getExternalStorageDirectory used for private data, File.createTempFile in shared locations, and plain SQLite databases holding credentials.",
+      "why": "Credentials sitting in plain files or on shared storage are exposed to any app or user that can reach them, and temp files often survive longer than expected. The safe version stores secrets in the Android Keystore or EncryptedSharedPreferences, keeps files in internal app storage with default private modes, and deletes temporary data promptly."
+    },
+    {
+      "rule": "Data copied to the system clipboard is readable by other apps in many Android versions and may persist in clipboard history, so one-time codes and sensitive values should not be placed there.",
+      "what_to_check": "Search for ClipboardManager.setPrimaryClip and ClipData.newPlainText, especially when the content is a code, token, account number or password. Check whether the clipboard is cleared afterward and whether the field is marked sensitive.",
+      "why": "Other apps can read the clipboard in older versions or when they have focus, and clipboard managers can retain the value. The safe version avoids copying secrets, uses EditText with password or no-suggestion input types, and clears the clipboard when the value is no longer needed."
+    },
+    {
+      "rule": "A network security configuration that permits cleartext traffic or trusts user-installed certificate authorities allows an attacker on the network or with a planted CA to read and modify app traffic.",
+      "what_to_check": "Open res/xml network security config files and the networkSecurityConfig attribute in the manifest. Look for base-config or domain-config with cleartextTrafficPermitted true, and trust-anchors that include the user store (certificates src user) in release builds. Also check for custom TrustManagers or HostnameVerifiers that accept all certificates.",
+      "why": "Cleartext traffic exposes credentials and session tokens to passive interception, and user CA trust lets a locally installed certificate decrypt TLS. The safe version sets cleartextTrafficPermitted false, trusts only the system store for release, limits any exceptions to specific domains, and does not override certificate validation."
+    }
+  ],
+  "rejected": [],
+  "usage": {
+    "input_tokens": 6435,
+    "output_tokens": 4981,
+    "cost": 0.003134
+  }
+}
