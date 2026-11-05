@@ -57,7 +57,8 @@ def write_report(config: dict) -> str | None:
              "**Models:** " + " · ".join(f"{label} `{model}`" for label, model, condition in rows if condition != WITH_LESSONS)
              + f" · Classifier `{config['classifier']}`", ""]
     teacher_scores = scores.get((config["teacher"], TEACHER))
-    lines += _lift_lines(config, rows, scores, 1.0 if by_teacher else teacher_scores and mean(teacher_scores["recall"]))
+    for line in _lift_lines(config, rows, scores, 1.0 if by_teacher else teacher_scores and mean(teacher_scores["recall"])):
+        lines += [line, ""]   # a blank line after each, so several students' lines don't merge into one paragraph
 
     if shown:
         lines += ["", "```mermaid", "xychart-beta", f'    title "{measure}: mean over runs (%)"',

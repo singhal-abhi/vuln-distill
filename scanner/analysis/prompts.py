@@ -2,6 +2,7 @@
 
 import json
 
+# Scan, system prompt: sent on every scan (teacher and students), asks for findings as JSON.
 # Deliberately says nothing about which kinds of bugs to look for: any such hint would lift the baseline.
 SCAN_SYSTEM = """You are a security reviewer looking at a decompiled Android app.
 Find security vulnerabilities in it. Report each distinct vulnerability once.
@@ -17,17 +18,20 @@ Reply with JSON only, in exactly this shape:
   "explanation": one or two sentences on how it can be exploited
 }}]}}"""
 
+# Scan, user message: the whole app (manifest, code, resources, library list) from App.to_prompt().
 SCAN_USER = "Review this app for security vulnerabilities.\n\n{app}"
 
-# Appended to the scan's user message when lessons are used. The system prompt stays identical.
+# Scan with lessons: appended to the scan's user message for the student's with-lessons runs.
+# The system prompt stays identical, so the lessons are the only difference between the two conditions.
 LESSONS_HINT = """
 
 A good pentester reviewing this app would check at least these points:
 {lessons}"""
 
-# How the teacher turns its findings into lessons. Lessons must help on any app: they may not name the app (also
-# enforced in code, see lessons.app_specific_terms) nor describe it, since detailed lessons that retell the app's own
-# bugs in generic words inflate the lift on that app and transfer poorly to others.
+# Lessons, system prompt: the teacher's single call that turns its findings into general lessons.
+# Lessons must help on any app: they may not name the app (also enforced in code, see lessons.app_specific_terms)
+# nor describe it, since detailed lessons that retell the app's own bugs in generic words inflate the lift on that
+# app and transfer poorly to others.
 LESSONS_SYSTEM = """You are a senior Android security researcher training a junior reviewer.
 You will see vulnerabilities you found in one app. Turn them into general lessons that help find the same kinds of bugs in ANY Android app.
 
@@ -56,15 +60,18 @@ Reply with JSON only, in exactly this shape:
   "why": how an attacker exploits it, and what the safe version looks like
 }]}"""
 
+# Lessons, user message: the teacher's own findings from this app (without their scoring category).
 LESSONS_USER = "Vulnerabilities found:\n\n{findings}"
 
-# Used only for scoring: maps free-text findings onto the fixed category list. Scanning models never see the list.
+# Classify, system prompt: the classifier labels each finding with one category from config, for scoring.
+# Scanning models never see the list.
 CLASSIFY_SYSTEM = """You sort security findings into categories.
 For each finding, pick the single best category from this list: {categories}
 Use "other" only if nothing fits.
 
 Reply with JSON only: {{"categories": [one category per finding, in the same order as the findings]}}"""
 
+# Classify, user message: one scan's findings (type, title, explanation) to label, in order.
 CLASSIFY_USER = "Findings:\n\n{findings}"
 
 
