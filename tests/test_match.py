@@ -75,3 +75,11 @@ def test_duplicates_count_once():
 def test_method_names_as_models_write_them():
     from scanner.scoring.match import _method_name
     assert _method_name("MainActivity.onCreate(Bundle)") == _method_name("onCreate()") == "oncreate"
+
+
+def test_teacher_findings_become_reference_entries():
+    from scanner.scoring.match import teacher_reference
+    [ref] = teacher_reference([finding("insecure-webview", "com/app/WebViewActivity.java", "onCreate")])
+    assert (ref.id, ref.categories, ref.locations) == (1, ["insecure-webview"], [Location("com/app/WebViewActivity.java", "onCreate")])
+    assert is_match(finding("insecure-webview", "WebViewActivity.java"), ref, "file")
+    assert not is_match(finding("hardcoded-secret", "WebViewActivity.java"), ref, "file")

@@ -1,67 +1,87 @@
-"""Score saved findings against the answer key and write a short, fixed-layout report. Makes no model calls.
+"""Score saved findings and write a short, fixed-layout report. Makes no model calls.
 
-What is scored: each student's recall without vs with lessons. The teacher's recall is shown as a reference.
+What is scored: each student's findings without vs with lessons, against a reference:
+- the app's answer key when it has one: recall, the share of known vulnerabilities found;
+- otherwise the teacher's findings: agreement, the share of the teacher's findings the student also found. This needs
+  no human labels, so it works on any app, but the teacher misses bugs and can be wrong, so it is not true recall.
 """
 
 import json
 from dataclasses import asdict
+from pathlib import Path
 from statistics import mean
 
+from scanner.analysis.findings import merge_runs
 from scanner.config import resolve
-from scanner.scoring.match import load_ground_truth, match_findings
-from scanner.store import BASELINE, TEACHER, WITH_LESSONS, load_runs, load_usage, read_lessons
 from scanner.llm.usage import Usage, total
+from scanner.scoring.match import Vulnerability, load_ground_truth, match_findings, teacher_reference
+from scanner.store import BASELINE, TEACHER, WITH_LESSONS, load_runs, load_usage, read_lessons
 
 
-def write_report(config: dict) -> str:
+def write_report(config: dict) -> str | None:
+    """Writes report.md and scores.json and returns the report; None if there is nothing to score against yet
+    (no answer key and no saved teacher scan)."""
     work_dir = resolve(config, config["app"]["work_dir"])
-    answer_key = load_ground_truth(resolve(config, config["app"]["ground_truth"]))
+    reference, by_teacher = _reference(config, work_dir)
+    if not reference:
+        return None
     location_mode = config["match"]["location"]
+    measure = "Agreement" if by_teacher else "Recall"
 
     rows = _rows(config)
     scores = {}   # (model, condition) -> per-run numbers
     for _, model, condition in rows:
+        if by_teacher and condition == TEACHER:
+            continue   # the teacher is the reference here; scoring it against itself would always give 100%
         runs = load_runs(work_dir, model, condition)
         if runs:
-            matches = [match_findings(findings, answer_key, location_mode) for findings in runs]
+            matches = [match_findings(findings, reference, location_mode) for findings in runs]
             scores[(model, condition)] = {
-                "recall": [len(m) / len(answer_key) for m in matches],
+                "recall": [len(m) / len(reference) for m in matches],
                 "findings": [len(findings) for findings in runs],
                 "unmatched": [len(findings) - len(m) for findings, m in zip(runs, matches)],
-                "hits": {v.id: sum(v.id in m for m in matches) for v in answer_key},
+                "hits": {v.id: sum(v.id in m for m in matches) for v in reference},
                 "usage": load_usage(work_dir, model, condition),
             }
     shown = [row for row in rows if (row[1], row[2]) in scores]
+    teacher_usage = load_usage(work_dir, config["teacher"], TEACHER) if by_teacher else []
     lessons = read_lessons(work_dir)
 
-    lines = ["# Results", "",
-             f"{len(answer_key)} known vulnerabilities. A finding counts when its bug type and {location_mode} match "
-             "the answer key.", "",
+    if by_teacher:
+        intro = (f"No answer key, so the students are scored against the teacher's {len(reference)} findings. A student "
+                 f"finding counts when its bug type and {location_mode} match one of the teacher's. This is agreement "
+                 "with the teacher, not true recall: the teacher misses some bugs, and some of its findings may be wrong.")
+    else:
+        intro = f"{len(reference)} known vulnerabilities. A finding counts when its bug type and {location_mode} match the answer key."
+    lines = ["# Results", "", intro, "",
              "**Models:** " + " · ".join(f"{label} `{model}`" for label, model, condition in rows if condition != WITH_LESSONS)
              + f" · Classifier `{config['classifier']}`", ""]
-    lines += _lift_lines(config, rows, scores)
+    teacher_scores = scores.get((config["teacher"], TEACHER))
+    lines += _lift_lines(config, rows, scores, 1.0 if by_teacher else teacher_scores and mean(teacher_scores["recall"]))
 
     if shown:
-        lines += ["", "```mermaid", "xychart-beta", '    title "Recall: mean over runs (%)"',
+        lines += ["", "```mermaid", "xychart-beta", f'    title "{measure}: mean over runs (%)"',
                   "    x-axis [" + ", ".join(f'"{label}"' for label, _, _ in shown) + "]",
-                  '    y-axis "Recall (%)" 0 --> 100',
+                  f'    y-axis "{measure} (%)" 0 --> 100',
                   "    bar [" + ", ".join(f"{mean(scores[(m, c)]['recall']) * 100:.0f}" for _, m, c in shown) + "]",
                   "```"]
 
-    lines += ["", "| | Recall | Range | Runs | Findings / run | Unmatched / run | Cost / run |",
+    lines += ["", f"| | {measure} | Range | Runs | Findings / run | Unmatched / run | Cost / run |",
               "|---|---:|---:|---:|---:|---:|---:|"]
     for label, model, condition in rows:
         s = scores.get((model, condition))
-        if not s:
+        if by_teacher and condition == TEACHER:
+            lines.append(f"| {label} | the reference | | | {len(reference)} findings | | {_cost(teacher_usage)} |")
+        elif not s:
             lines.append(f"| {label} | not run | | | | | |")
-            continue
-        low, high = min(s["recall"]), max(s["recall"])
-        spread = f"{low:.0%}" if low == high else f"{low:.0%}–{high:.0%}"
-        lines.append(f"| {label} | **{mean(s['recall']):.0%}** | {spread} | {len(s['recall'])} "
-                     f"| {mean(s['findings']):.1f} | {mean(s['unmatched']):.1f} | {_cost(s['usage'])} |")
+        else:
+            low, high = min(s["recall"]), max(s["recall"])
+            spread = f"{low:.0%}" if low == high else f"{low:.0%}–{high:.0%}"
+            lines.append(f"| {label} | **{mean(s['recall']):.0%}** | {spread} | {len(s['recall'])} "
+                         f"| {mean(s['findings']):.1f} | {mean(s['unmatched']):.1f} | {_cost(s['usage'])} |")
 
     # Cost to produce each result (a run's scan plus classifying its findings), even if it was served from the cache now.
-    runs_usage = [usage for s in scores.values() for usage in s["usage"]]
+    runs_usage = [usage for s in scores.values() for usage in s["usage"]] + teacher_usage
     if runs_usage:
         lessons_usage = [Usage(**lessons["usage"])] if lessons and "usage" in lessons else []
         spent = runs_usage + lessons_usage
@@ -70,11 +90,11 @@ def write_report(config: dict) -> str:
                       f"Each run includes classifying its findings.{lessons_note}"]
 
     if shown:
-        lines += ["", "## Per vulnerability", "",
+        lines += ["", "## Per teacher finding" if by_teacher else "## Per vulnerability", "",
                   "Each dot is one run: ● found, ○ missed. ▲ / ▼: found in more / fewer runs with lessons.", "",
-                  "| # | Vulnerability | " + " | ".join(label for label, _, _ in shown) + " |",
+                  f"| # | {'Teacher finding' if by_teacher else 'Vulnerability'} | " + " | ".join(label for label, _, _ in shown) + " |",
                   "|---:|---|" + ":---:|" * len(shown)]
-        for v in answer_key:
+        for v in reference:
             cells = [_dots(scores, model, condition, v.id) for _, model, condition in shown]
             lines.append(f"| {v.id} | {v.name} | " + " | ".join(cells) + " |")
 
@@ -87,8 +107,19 @@ def write_report(config: dict) -> str:
     work_dir.mkdir(parents=True, exist_ok=True)   # `report` may run before anything was scanned
     (work_dir / "report.md").write_text(report)
     saved = {f"{m}/{c}": {**s, "usage": [asdict(u) for u in s["usage"]]} for (m, c), s in scores.items()}
-    (work_dir / "scores.json").write_text(json.dumps(saved, indent=2))
+    (work_dir / "scores.json").write_text(json.dumps({"reference": "teacher" if by_teacher else "answer key",
+                                                      "measure": measure.lower(), "scores": saved}, indent=2))
     return report
+
+
+def _reference(config: dict, work_dir: Path) -> tuple[list[Vulnerability] | None, bool]:
+    """(reference entries, whether they are the teacher's findings): the answer key when the app has one, otherwise
+    the teacher's saved findings (all its runs merged), otherwise None."""
+    ground_truth = config["app"].get("ground_truth")
+    if ground_truth and resolve(config, ground_truth).is_file():
+        return load_ground_truth(resolve(config, ground_truth)), False
+    teacher_runs = load_runs(work_dir, config["teacher"], TEACHER)
+    return (teacher_reference(merge_runs(teacher_runs)) if teacher_runs else None), True
 
 
 def _rows(config: dict) -> list[tuple[str, str, str]]:
@@ -101,16 +132,16 @@ def _rows(config: dict) -> list[tuple[str, str, str]]:
     return rows + [("Teacher (reference)", config["teacher"], TEACHER)]
 
 
-def _lift_lines(config: dict, rows: list[tuple[str, str, str]], scores: dict) -> list[str]:
-    teacher = scores.get((config["teacher"], TEACHER))
+def _lift_lines(config: dict, rows: list[tuple[str, str, str]], scores: dict, teacher: float | None) -> list[str]:
+    """One line per student: its lift from lessons and, when the teacher's score is known, how much of the gap to
+    the teacher it closes. Against the teacher's own findings, the teacher scores 100% by definition."""
     lines = []
     for label, student, condition in rows:
         before, after = scores.get((student, BASELINE)), scores.get((student, WITH_LESSONS))
         if condition != BASELINE or not (before and after):
             continue
         b, a = mean(before["recall"]), mean(after["recall"])
-        gap = f"; closes {(a - b) / (mean(teacher['recall']) - b):.0%} of the gap to the teacher" \
-            if teacher and mean(teacher["recall"]) > b else ""
+        gap = f"; closes {(a - b) / (teacher - b):.0%} of the gap to the teacher" if teacher and teacher > b else ""
         who = f" ({label})" if len(config["students"]) > 1 else ""
         lines.append(f"**Lift from lessons{who}: {(a - b) * 100:+.0f} points** ({b:.0%} → {a:.0%}{gap})")
     return lines

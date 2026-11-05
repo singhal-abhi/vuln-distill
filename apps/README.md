@@ -19,5 +19,5 @@ app:
   input_dir: target/myapp/decompiled   # jadx output; created from `apk` on first run
   apk: target/myapp/MyApp.apk
   work_dir: work/myapp                 # findings, lessons, report
-  ground_truth: ground_truth/myapp.yaml   # optional: only to score the student's lift; leave out if you have none
+  ground_truth: ground_truth/myapp.yaml   # optional: without it, the student is scored against the teacher's findings
 ```

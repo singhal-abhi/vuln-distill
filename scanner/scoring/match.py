@@ -24,6 +24,14 @@ class Vulnerability:
     locations: list[Location]   # any of these places is accepted
 
 
+def teacher_reference(findings: list[Finding]) -> list[Vulnerability]:
+    """The teacher's findings as reference entries, for an app without an answer key. Each entry accepts the finding's
+    own bug type at its own file (and method), so scoring a student against them measures agreement with the teacher."""
+    return [Vulnerability(id=n, name=f"{f.title or f.type} ({Path(f.file).name})", categories=[f.category],
+                          locations=[Location(f.file, f.method)])
+            for n, f in enumerate(findings, 1)]
+
+
 def load_ground_truth(path: Path) -> list[Vulnerability]:
     entries = yaml.safe_load(path.read_text())["vulnerabilities"]
     return [

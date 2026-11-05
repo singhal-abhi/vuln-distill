@@ -4,7 +4,7 @@ from pathlib import Path
 
 from scanner.llm.cache import ResponseCache
 from scanner.config import resolve
-from scanner.analysis.findings import Finding
+from scanner.analysis.findings import Finding, merge_runs
 from scanner.ingest.app import load_app
 from scanner.analysis.lessons import make_lessons
 from scanner.llm.models import build_model
@@ -111,13 +111,3 @@ def load_lessons(work_dir: Path, config: dict) -> list[dict]:
         raise SystemExit(f"No lessons from teacher {config['teacher']} yet. Run: python -m scanner run --step teacher")
     return lessons
 
-
-def merge_runs(runs: list[list[Finding]]) -> list[Finding]:
-    """Every finding of the first run, plus findings from later runs at places (category, file, method) not yet
-    covered, so the teacher teaches from its full coverage without repeats."""
-    merged, seen = [], set()
-    for findings in runs:
-        new = [f for f in findings if (f.category, f.file.lower(), f.method.lower()) not in seen]
-        merged += new
-        seen |= {(f.category, f.file.lower(), f.method.lower()) for f in new}
-    return merged

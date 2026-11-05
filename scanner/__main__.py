@@ -33,12 +33,10 @@ def main() -> None:
         parser.error("--force only applies to the teacher step")
     if args.command == "run":
         run(config, [args.step] if args.step else STEPS, force_teacher=args.force)
-    # The answer key is optional: it only measures recall. An app without one just gets its findings.
-    ground_truth = config["app"].get("ground_truth")
-    if not ground_truth or not resolve(config, ground_truth).is_file():
-        print(f"No answer key, so no scoring. Findings are in {resolve(config, config['app']['work_dir']) / 'findings'}")
-        return
-    print(write_report(config))
+    # Scored against the answer key if the app has one, otherwise against the teacher's findings (see report.py).
+    report = write_report(config)
+    print(report or f"Nothing to score yet: no answer key and no teacher scan. Findings are in "
+                    f"{resolve(config, config['app']['work_dir']) / 'findings'}")
 
 
 if __name__ == "__main__":

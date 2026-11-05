@@ -76,3 +76,14 @@ def extract_json(text: str):
     if start == -1 or end == -1:
         raise ValueError("no JSON object in model output")
     return json.loads(text[start : end + 1])
+
+
+def merge_runs(runs: list[list[Finding]]) -> list[Finding]:
+    """Every finding of the first run, plus findings from later runs at places (category, file, method) not yet
+    covered, so the teacher teaches from its full coverage without repeats."""
+    merged, seen = [], set()
+    for findings in runs:
+        new = [f for f in findings if (f.category, f.file.lower(), f.method.lower()) not in seen]
+        merged += new
+        seen |= {(f.category, f.file.lower(), f.method.lower()) for f in new}
+    return merged
