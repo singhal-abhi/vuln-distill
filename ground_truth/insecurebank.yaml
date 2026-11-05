@@ -1,4 +1,4 @@
-# InsecureBankv2 answer key (InsecureBankv2.apk from the repo root, git blob 349ab1cb95ec4a4338afda8a7300540e4fd83ab3,
+# InsecureBankv2 ground truth (InsecureBankv2.apk from the repo root, git blob 349ab1cb95ec4a4338afda8a7300540e4fd83ab3,
 # sha256 b18af2a0e44d7634bbcdf93664d9c78a2695e050393fcfbb5e8b91f902d194a4).
 # Used only to score results; it is never shown to any model. Written before any model scanned this app.
 #
@@ -17,7 +17,7 @@
 # - "Application Patching" (#10) is located at what patching targets: an admin feature hidden only by the bundled
 #   is_admin resource, checked on the client.
 # - #12 Pasteboard and #14 Keyboard cache live in layout attributes, and layouts are not sent to the models, so they
-#   are very hard to find from what the scan sees. Kept anyway: the answer key should not bend to the scanner.
+#   are very hard to find from what the scan sees. Kept anyway: the ground truth should not bend to the scanner.
 
 vulnerabilities:
   - id: 1

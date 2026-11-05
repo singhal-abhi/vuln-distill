@@ -7,7 +7,7 @@ A frontier model (the **teacher**) scans a decompiled Android app, then turns wh
 An open model (the **student**) scans the same app twice, without and with those lessons.
 
 **Scoring** measures one thing: how much the lessons improve the student, comparing its runs without and with them.
-- **With an answer key** (the app's known vulnerabilities, see [`ground_truth/`](ground_truth/)): the student's
+- **With a ground-truth list** (the app's known vulnerabilities, see [`ground_truth/`](ground_truth/)): the student's
   recall, the share of known vulnerabilities it found.
 - **Without one**, as for any real app: the student's agreement with the teacher, the share of the teacher's findings
   it also found. No labels are needed, but the teacher misses bugs and can be wrong, so this is not true recall.
@@ -51,7 +51,7 @@ curl -L -o target/insecurebank/InsecureBankv2.apk \
   https://raw.githubusercontent.com/dineshshetty/Android-InsecureBankv2/master/InsecureBankv2.apk
 ```
 
-The SHA-256 of each APK is recorded at the top of its answer key in `ground_truth/`.
+The SHA-256 of each APK is recorded at the top of its ground-truth file in `ground_truth/`.
 
 ## 3. Run
 
@@ -86,7 +86,7 @@ Everything goes to the app's `work_dir` (for example `work/insecureshop/`):
 
 | File | Contains |
 |---|---|
-| `report.md` | The student's recall (with an answer key) or agreement with the teacher (without) without vs with lessons, the lift; then, for reference, the teacher's row, cost, a per-item table and the lessons |
+| `report.md` | The student's recall (with a ground-truth list) or agreement with the teacher (without) without vs with lessons, the lift; then, for reference, the teacher's row, cost, a per-item table and the lessons |
 | `scores.json` | The same numbers, machine-readable |
 | `lessons.json` | The teacher's lessons, plus any rejected as app-specific (with the reason) |
 | `findings/<model>/<condition>/` | Every finding of every run, and what each run cost |
@@ -96,7 +96,7 @@ Model replies are cached in `work/cache/` (shared by all apps), so re-running on
 ## 5. Scan a new app or use another model
 
 - **New app:** copy `apps/androgoat.yaml`, point `apk` at the new APK and give it its own `work_dir`. Leave out
-  `ground_truth` unless you have an answer key: the student is then scored against the teacher's findings.
+  `ground_truth` unless you have a ground-truth list: the student is then scored against the teacher's findings.
   The whole app goes into one request, so before any call `run` checks that it fits each model's context window.
   If it doesn't, the run stops and lists models that fit.
 - **Another model:** set `teacher`, `students` or `classifier` in `config.yaml` to `<provider>/<model id>`, for
@@ -113,11 +113,11 @@ independent of each other and could run in parallel on a paid tier.
 - **Scan:** the prompt holds the manifest, the app's own code, key resources and the library list, and never names
   bug types. Models describe findings in their own words.
 - **Classify (scoring only):** a fixed classifier model maps each finding onto `categories` in `config.yaml`, the
-  same names the answer keys use. Scanning models never see this list.
+  same names the ground truth uses. Scanning models never see this list.
 - **Lessons:** the teacher writes rules meant for any Android app. The prompt forbids naming or describing the app,
   and lessons that name its package or classes are rejected in code. The final lessons for the three test apps are in
   [`examples/lessons/`](examples/lessons/).
-- **Score:** a finding counts when its category and its file match a reference entry (an answer-key entry, or one of
+- **Score:** a finding counts when its category and its file match a reference entry (a ground-truth entry, or one of
   the teacher's findings when there is no key), one finding per entry. The number that matters is the student's score
   with lessons minus without.
 
@@ -129,8 +129,8 @@ independent of each other and could run in parallel on a paid tier.
 | [`scanner/ingest/`](scanner/ingest/) | Decompiles and loads the app |
 | [`scanner/llm/`](scanner/llm/) | Model providers, retries, the reply cache, tokens and cost |
 | [`scanner/analysis/`](scanner/analysis/) | Scanning, classifying, lessons; all prompts |
-| [`scanner/scoring/`](scanner/scoring/) | Matching against the answer key, the report |
+| [`scanner/scoring/`](scanner/scoring/) | Matching against the ground truth, the report |
 | [`apps/`](apps/) | Per-app settings for apps other than the default |
-| [`ground_truth/`](ground_truth/) | Answer keys |
+| [`ground_truth/`](ground_truth/) | Ground truth: each test app's known vulnerabilities |
 | [`examples/lessons/`](examples/lessons/) | The teacher's final lessons for each test app, behind the write-up's results |
 | [`tests/`](tests/) | Unit tests |

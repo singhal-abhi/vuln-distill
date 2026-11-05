@@ -1,6 +1,6 @@
 # ground_truth
 
-Answer keys: the known vulnerabilities of each test app. **Optional**: with one, the student is scored on recall (the
+Ground truth: the known vulnerabilities of each test app. **Optional**: with one, the student is scored on recall (the
 share of known vulnerabilities found); without one, it is scored on agreement with the teacher's findings. They are never
 shown to a model. A real app needs none: leave `ground_truth` out of its app file.
 

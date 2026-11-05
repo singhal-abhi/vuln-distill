@@ -113,7 +113,7 @@ def test_several_students_each_run_both_conditions_with_the_same_lessons(tmp_pat
     assert prompts_seen[("s1", "lessons")][0] == prompts_seen[("s2", "lessons")][0]
     assert "Check WebView settings" in prompts_seen[("s1", "lessons")][0]
 
-    report = write_report(config)   # no answer key: scored against the teacher's two findings
+    report = write_report(config)   # no ground truth: scored against the teacher's two findings
     for row in ["| Student 1 |", "| Student 1 + lessons |", "| Student 2 |", "| Student 2 + lessons |", "| Teacher (reference) |"]:
         assert row in report, row
     assert "Lift from lessons (Student 1): +50 points" in report     # 1 of 2 -> 2 of 2

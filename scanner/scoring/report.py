@@ -1,7 +1,7 @@
 """Score saved findings and write a short, fixed-layout report. Makes no model calls.
 
 What is scored: each student's findings without vs with lessons, against a reference:
-- the app's answer key when it has one: recall, the share of known vulnerabilities found;
+- the app's ground truth when it has one: recall, the share of known vulnerabilities found;
 - otherwise the teacher's findings: agreement, the share of the teacher's findings the student also found. This needs
   no human labels, so it works on any app, but the teacher misses bugs and can be wrong, so it is not true recall.
 """
@@ -20,7 +20,7 @@ from scanner.store import BASELINE, TEACHER, WITH_LESSONS, load_runs, load_usage
 
 def write_report(config: dict) -> str | None:
     """Writes report.md and scores.json and returns the report; None if there is nothing to score against yet
-    (no answer key and no saved teacher scan)."""
+    (no ground truth and no saved teacher scan)."""
     work_dir = resolve(config, config["app"]["work_dir"])
     reference, by_teacher = _reference(config, work_dir)
     if not reference:
@@ -48,11 +48,11 @@ def write_report(config: dict) -> str | None:
     lessons = read_lessons(work_dir)
 
     if by_teacher:
-        intro = (f"No answer key, so the students are scored against the teacher's {len(reference)} findings. A student "
+        intro = (f"No ground truth, so the students are scored against the teacher's {len(reference)} findings. A student "
                  f"finding counts when its bug type and {location_mode} match one of the teacher's. This is agreement "
                  "with the teacher, not true recall: the teacher misses some bugs, and some of its findings may be wrong.")
     else:
-        intro = f"{len(reference)} known vulnerabilities. A finding counts when its bug type and {location_mode} match the answer key."
+        intro = f"{len(reference)} known vulnerabilities. A finding counts when its bug type and {location_mode} match the ground truth."
     lines = ["# Results", "", intro, "",
              "**Models:** " + " · ".join(f"{label} `{model}`" for label, model, condition in rows if condition != WITH_LESSONS)
              + f" · Classifier `{config['classifier']}`", ""]
@@ -108,13 +108,13 @@ def write_report(config: dict) -> str | None:
     work_dir.mkdir(parents=True, exist_ok=True)   # `report` may run before anything was scanned
     (work_dir / "report.md").write_text(report)
     saved = {f"{m}/{c}": {**s, "usage": [asdict(u) for u in s["usage"]]} for (m, c), s in scores.items()}
-    (work_dir / "scores.json").write_text(json.dumps({"reference": "teacher" if by_teacher else "answer key",
+    (work_dir / "scores.json").write_text(json.dumps({"reference": "teacher" if by_teacher else "ground truth",
                                                       "measure": measure.lower(), "scores": saved}, indent=2))
     return report
 
 
 def _reference(config: dict, work_dir: Path) -> tuple[list[Vulnerability] | None, bool]:
-    """(reference entries, whether they are the teacher's findings): the answer key when the app has one, otherwise
+    """(reference entries, whether they are the teacher's findings): the ground truth when the app has one, otherwise
     the teacher's saved findings (all its runs merged), otherwise None."""
     ground_truth = config["app"].get("ground_truth")
     if ground_truth and resolve(config, ground_truth).is_file():

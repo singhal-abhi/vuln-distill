@@ -78,11 +78,11 @@ ingest:
   max_resource_bytes: 20000
 
 match:
-  # "file": a finding must point at the right file. "method": also the right method, when the answer key names one.
+  # "file": a finding must point at the right file. "method": also the right method, when the ground truth names one.
   location: file
 
 # Bug types used for scoring. Scanning models never see this list; the classifier maps their findings onto it,
-# and the answer key uses the same names, so types compare exactly.
+# and the ground truth uses the same names, so types compare exactly.
 categories:
   - hardcoded-secret
   - insecure-webview

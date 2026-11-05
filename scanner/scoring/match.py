@@ -1,4 +1,4 @@
-"""Matching findings to the answer key. A finding counts only with the right bug type AND the right location."""
+"""Matching findings to the ground truth. A finding counts only with the right bug type AND the right location."""
 
 import os
 import re
@@ -25,7 +25,7 @@ class Vulnerability:
 
 
 def teacher_reference(findings: list[Finding]) -> list[Vulnerability]:
-    """The teacher's findings as reference entries, for an app without an answer key. Each entry accepts the finding's
+    """The teacher's findings as reference entries, for an app without ground truth. Each entry accepts the finding's
     own bug type at its own file (and method), so scoring a student against them measures agreement with the teacher."""
     return [Vulnerability(id=n, name=f"{f.title or f.type} ({Path(f.file).name})", categories=[f.category],
                           locations=[Location(f.file, f.method)])
@@ -92,7 +92,7 @@ def _path_parts(path: str) -> list[str]:
 def match_findings(findings: list[Finding], answer_key: list[Vulnerability], location_mode: str) -> dict[int, int]:
     """Pair findings with vulnerabilities, each used at most once. Returns {vulnerability id: index of its finding}.
 
-    1. As many pairs as possible: one finding must not count for two overlapping answer-key entries.
+    1. As many pairs as possible: one finding must not count for two overlapping ground-truth entries.
     2. Among the ways to get that many, credit each finding to the entry it fits best: the one that lists the
        finding's bug type earliest. An "insecure-webview" finding goes to the WebView-settings entry (its main
        type) rather than to a URL-validation entry that merely also accepts it.

@@ -1,4 +1,4 @@
-"""Assign each free-text finding to one category from config, so types can be compared with the answer key."""
+"""Assign each free-text finding to one category from config, so types can be compared with the ground truth."""
 
 import json
 

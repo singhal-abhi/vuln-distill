@@ -1,4 +1,4 @@
-# InsecureShop answer key: the 19 vulnerabilities from the repo README.
+# InsecureShop ground truth: the 19 vulnerabilities from the repo README.
 # Used only to score results; it is never shown to any model.
 #
 # A finding matches an entry when its category is one of `categories` AND its file is one of `locations`

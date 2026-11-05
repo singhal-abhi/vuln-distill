@@ -36,9 +36,9 @@ def main() -> None:
         parser.error("--force only applies to the teacher step")
     if args.command == "run":
         run(config, [args.step] if args.step else STEPS, force_teacher=args.force)
-    # Scored against the answer key if the app has one, otherwise against the teacher's findings (see report.py).
+    # Scored against the ground truth if the app has one, otherwise against the teacher's findings (see report.py).
     report = write_report(config)
-    print(report or f"Nothing to score yet: no answer key and no teacher scan. Findings are in "
+    print(report or f"Nothing to score yet: no ground truth and no teacher scan. Findings are in "
                     f"{resolve(config, config['app']['work_dir']) / 'findings'}")
 
 

@@ -14,6 +14,6 @@ The Python package. Run it as `python -m scanner {ingest,run,report}` (see the m
 | [`ingest/`](ingest/) | Decompiles and loads the app |
 | [`llm/`](llm/) | Talks to models |
 | [`analysis/`](analysis/) | What models are asked to do, and all prompts |
-| [`scoring/`](scoring/) | Matching against the answer key, the report |
+| [`scoring/`](scoring/) | Matching against the ground truth, the report |
 
 A teacher's scan is saved and reused (re-run with `--force`); its lessons are redone only when missing or empty.

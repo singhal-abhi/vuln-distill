@@ -1,4 +1,4 @@
-# AndroGoat answer key (v2.0.1 release APK, sha256 3e6f6b538b82874dd94c0d8cdadd69ba54d49b59d2c7eb055073892e8a4fc0e0).
+# AndroGoat ground truth (v2.0.1 release APK, sha256 3e6f6b538b82874dd94c0d8cdadd69ba54d49b59d2c7eb055073892e8a4fc0e0).
 # Used only to score results; it is never shown to any model. Written before any model scanned this app.
 #
 # Source: the challenge list in https://github.com/satishpatnayak/AndroGoat#readme, with each location found in
@@ -14,7 +14,7 @@
 #   trusting user-installed CAs (#21).
 # - Added: OS command injection (#26). The app ships a challenge activity for it, but the README list omits it.
 # - #6 Keyboard Cache lives in a layout's inputType, and layouts are not sent to the models, so it is very hard to
-#   find from what the scan sees. Kept anyway: the answer key should not bend to the scanner.
+#   find from what the scan sees. Kept anyway: the ground truth should not bend to the scanner.
 
 vulnerabilities:
   - id: 1
