@@ -56,8 +56,14 @@ The SHA-256 of each APK is recorded at the top of its answer key in `ground_trut
 ## 3. Run
 
 ```bash
-.venv/bin/python -m scanner ingest      # check what will be scanned (files, resources, prompt size); no model calls
 .venv/bin/python -m scanner run         # teacher scan + lessons, then student without and with lessons, then the report
+```
+
+`run` decompiles the APK itself if needed. Optionally, run `ingest` first to check what will be scanned (files,
+resources, prompt size) without any model calls:
+
+```bash
+.venv/bin/python -m scanner ingest      # optional
 ```
 
 `run` prints progress and the cost of every scan, then the report. Step by step instead:

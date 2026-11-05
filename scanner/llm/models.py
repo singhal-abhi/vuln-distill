@@ -146,6 +146,10 @@ def build_model(config: dict, name: str) -> Model:
         raise SystemExit(f"{name!r}: write models as <provider>/<model id>, with a provider from: "
                          + ", ".join(config["providers"]))
     provider = config["providers"][provider_name]
+    key = provider["api_key_env"]
+    if not os.environ.get(key):   # unset, or left blank after copying .env.example
+        raise SystemExit(f"{name}: {key} is not set. Add it to .env (see .env.example), or pick a model from "
+                         "another provider in config.yaml.")
     return PROVIDER_TYPES[provider["type"]](name, model_id, provider, config["run"]["max_tokens"],
                                             config.get("prices", {}).get(name))
 

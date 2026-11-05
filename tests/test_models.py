@@ -29,6 +29,17 @@ def test_models_are_written_as_provider_slash_model_id():
         build_model(config, "groq/some-model")            # unknown provider; the message lists the known ones
 
 
+@pytest.mark.parametrize("value", [None, ""])   # unset, or blank as copied from .env.example
+def test_missing_api_key_names_the_variable(monkeypatch, value):
+    if value is None:
+        monkeypatch.delenv("TEST_KEY", raising=False)
+    else:
+        monkeypatch.setenv("TEST_KEY", value)
+    config = {"providers": {"anthropic": {"type": "anthropic", "api_key_env": "TEST_KEY"}}, "run": {"max_tokens": 1}}
+    with pytest.raises(SystemExit, match="TEST_KEY is not set"):
+        build_model(config, "anthropic/claude-haiku-5-5")
+
+
 def test_schemas_are_strict_compatible():
     def check(node):
         if node.get("type") == "object":
